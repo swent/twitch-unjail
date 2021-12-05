@@ -8,6 +8,8 @@ namespace TwitchUnjail.Core.Models {
         
         public long Id { get; }
         
+        public long BroadcastId { get; }
+        
         public string Title { get; }
         
         public string ChannelName { get; }
@@ -20,8 +22,9 @@ namespace TwitchUnjail.Core.Models {
         
         public Dictionary<FeedQuality, string> Feeds { get; }
 
-        public Vod(long id, string title, string channelName, string channelDisplayName, DateTime recordDate, int durationSeconds, Dictionary<FeedQuality, string> feeds) {
+        public Vod(long id, long broadcastId, string title, string channelName, string channelDisplayName, DateTime recordDate, int durationSeconds, Dictionary<FeedQuality, string> feeds) {
             Id = id;
+            BroadcastId = broadcastId;
             Title = title;
             ChannelName = channelName;
             ChannelDisplayName = channelDisplayName;

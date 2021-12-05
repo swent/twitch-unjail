@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -10,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
 using TwitchUnjail.Core.Models;
+using TwitchUnjail.Core.Utilities;
 using Timer = System.Timers.Timer;
 
 namespace TwitchUnjail.Core.Managers {
@@ -21,25 +21,28 @@ namespace TwitchUnjail.Core.Managers {
         private const int SpeedAveragingSeconds = 20;
         
         public delegate void DownloadProgressUpdateHandler(object sender, DownloadProgressUpdateEventArgs eventArgs);
-        public event DownloadProgressUpdateHandler? DownloadProgressUpdate;
+        public event DownloadProgressUpdateHandler DownloadProgressUpdate;
         
         public ConcurrentQueue<Chunk> Chunks { get; }
         public string TargetFilePath { get; }
         
         private bool _running;
-        private DownloadProgressTracker? _progressTracker;
+        private DownloadProgressTracker _progressTracker;
         private DateTime _startTime;
-        private Task? _finishedTask;
-        private Exception? _encounteredException;
+        private Task _finishedTask;
+        private Exception _encounteredException;
         private int _finishedIndex;
         private int _lastIndex;
-        private ConcurrentDictionary<int, Chunk>? _doneQueue;
-        private FileStream? _stream;
-        private BinaryWriter? _writer;
+        private ConcurrentDictionary<int, Chunk> _doneQueue;
+        private FileStream _stream;
+        private BinaryWriter _writer;
         private Timer _progressTimer;
+        private Timer _allowanceTimer;
+        private int _targetKbps;
+        private int _lastAllowanceIndex;
         private ConcurrentDictionary<DateTime, long> _bytesDownloadedTracker;
         private ConcurrentDictionary<DateTime, long> _bytesWrittenTracker;
-        private Thread[]? _threads;
+        private (Thread, MeteredHttpDownloader)[] _threads;
 
         public ChunkedDownloadManager(IOrderedEnumerable<string> urlsToDownload, string targetFilePath) {
             var counter = 0;
@@ -48,18 +51,19 @@ namespace TwitchUnjail.Core.Managers {
             TargetFilePath = targetFilePath;
             _running = false;
             _progressTimer = new Timer();
-            _progressTimer.Interval = 300.0;
+            _progressTimer.Interval = 400.0;
             _progressTimer.AutoReset = true;
             _progressTimer.Elapsed += OnProgressTimerElapsed;
             _bytesDownloadedTracker = new ConcurrentDictionary<DateTime, long>();
             _bytesWrittenTracker = new ConcurrentDictionary<DateTime, long>();
         }
 
-        public async ValueTask Start(int? threadCount, DownloadProgressTracker? progressTracker = null) {
+        public async ValueTask Start(int? threadCount, int? targetKbps = null, DownloadProgressTracker progressTracker = null) {
             if (_running) {
                 throw new Exception("Download manager already running.");
             }
             /* Cleanup and preset before run */
+            var threads = threadCount ?? ThreadCount;
             _running = true;
             _progressTracker = progressTracker;
             _startTime = DateTime.Now;
@@ -71,23 +75,36 @@ namespace TwitchUnjail.Core.Managers {
             Directory.CreateDirectory(Path.GetDirectoryName(TargetFilePath)!);
             _stream = new FileStream(TargetFilePath, FileMode.Create);
             _writer = new BinaryWriter(_stream, Encoding.UTF8);
+            if (targetKbps != null) {
+                StartAllowanceTimer(threads);
+                _targetKbps = (int)targetKbps;
+                _lastAllowanceIndex = -1;
+            }
 
             /* Start threads and do work */
-            _threads = Enumerable.Range(0, threadCount ?? ThreadCount)
-                .Select(i => new Thread(DoWork))
+            _threads = Enumerable.Range(0, threads)
+                .Select(i => (new Thread(DoWork), new MeteredHttpDownloader(targetKbps == null ? null : _targetKbps / threads * 1024 / 4)))
                 .ToArray();
-            foreach (var thread in _threads) {
-                thread.Start();
+            for (var i = 0; i < _threads.Length; i++) {
+                _threads[i].Item2.DownloadNotification += OnThreadDownloadNotification;
+                _threads[i].Item1.Start(i);
             }
             if (progressTracker != null)
                 _progressTimer.Start();
 
             /* Cleanup after run */
             await _finishedTask;
-            if (progressTracker != null)
+            if (progressTracker != null) {
                 _progressTimer.Stop();
+            }
             await _writer.DisposeAsync();
             await _stream.DisposeAsync();
+            if (targetKbps != null) {
+                _allowanceTimer.Stop();
+            }
+            for (var i = 0; i < _threads.Length; i++) {
+                _threads[i].Item2.DownloadNotification -= OnThreadDownloadNotification;
+            }
             _running = false;
 
             /* Check for errors */
@@ -96,24 +113,27 @@ namespace TwitchUnjail.Core.Managers {
             }
         }
 
-        private async void DoWork() {
-            var httpClient = new HttpClient();
-            httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.36 Safari/537.36");
+        private void StartAllowanceTimer(int threadCount) {
+            _allowanceTimer = new Timer();
+            _allowanceTimer.Interval = 1000 / threadCount; /* To account for int-cutoff and timer delay we set the interval a little faster than 1sec */
+            _allowanceTimer.AutoReset = true;
+            _allowanceTimer.Elapsed += OnAllowanceTimerElapsed;
+            _allowanceTimer.Start();
+        }
+
+        private async void DoWork(object threadIndex) {
+            var downloader = _threads[(int)threadIndex].Item2;
 
             /* Process until chunks-queue is empty */
             while (_encounteredException == null && Chunks.TryDequeue(out var chunk)) {
                 var retryCounter = 0;
                 while (!chunk.Done) {
                     try {
-                        var response = await httpClient.GetAsync(chunk.Url);
-                        response.EnsureSuccessStatusCode();
-                        chunk.Content = await response.Content.ReadAsByteArrayAsync();
-                        _bytesDownloadedTracker[DateTime.Now] = chunk.Content.Length;
+                        chunk.Content = await downloader.Download(chunk.Url);
                         MarkFinished(chunk);
                     } catch (Exception ex) {
                         retryCounter++;
                         if (retryCounter > RetryCount) {
-                            httpClient.Dispose();
                             AbortThreads(ex);
                             return;
                         } else {
@@ -123,8 +143,6 @@ namespace TwitchUnjail.Core.Managers {
                     }
                 }
             }
-            
-            httpClient.Dispose();
         }
 
         private void MarkFinished(Chunk chunk) {
@@ -166,20 +184,30 @@ namespace TwitchUnjail.Core.Managers {
         public void AbortThreads(Exception exception) {
             /* Set exception property and wait for all threads to exit */
             _encounteredException = exception;
-            while (_threads.Count(t => t.IsAlive) > 1) {
-                Thread.Sleep(1000);
+            while (_threads.Count(t => t.Item1.IsAlive) > 1) {
+                Thread.Sleep(500);
             }
             
             /* Signal main method to continue */
             _finishedTask?.RunSynchronously();
         }
         
-        private void OnProgressTimerElapsed(object? sender, ElapsedEventArgs e) {
+        private void OnProgressTimerElapsed(object sender, ElapsedEventArgs e) {
             var eventArgs = GenerateProgressUpdateEventArgs();
             DownloadProgressUpdate?.Invoke(this, eventArgs);
             if (_progressTracker != null) {
                 _progressTracker.SignalProgressUpdate(eventArgs);
             }
+        }
+        
+        private void OnAllowanceTimerElapsed(object sender, ElapsedEventArgs e) {
+            var allowanceIndex = ++_lastAllowanceIndex % _threads.Length;
+            _threads[allowanceIndex].Item2.Grant(_targetKbps * 1024 / _threads.Length);
+            _lastAllowanceIndex = allowanceIndex;
+        }
+
+        private void OnThreadDownloadNotification(object sender, int bytesDownloaded) {
+            _bytesDownloadedTracker[DateTime.Now] = bytesDownloaded;
         }
 
         private DownloadProgressUpdateEventArgs GenerateProgressUpdateEventArgs() {
@@ -223,10 +251,102 @@ namespace TwitchUnjail.Core.Managers {
         }
     }
 
+    public class MeteredHttpDownloader {
+
+        private const int BufferSize = 64 * 1024;
+        private const int MaxSavedUpAllowance = 16 * 1024 * 1024;
+        
+        /* Events used to update subscribers of number of bytes downloaded */
+        public delegate void DownloadNotificationHandler(object sender, int bytesDownloaded);
+        public event DownloadNotificationHandler DownloadNotification;
+
+        private HttpClient _client;
+        private int? _byteAllowance;
+        private byte[] _buffer;
+        private object _lock;
+        
+        public MeteredHttpDownloader(int? byteAllowance) {
+            _client = new HttpClient();
+            _client.DefaultRequestHeaders.Add("User-Agent", HttpHelper.UserAgent);
+            _byteAllowance = byteAllowance;
+            _buffer = new byte[BufferSize];
+            _lock = new object();
+        }
+
+        /**
+         * Grands a number of bytes to this downloaders allowance.
+         */
+        public void Grant(int bytes) {
+            lock (_lock) {
+                _byteAllowance = Math.Min((_byteAllowance ?? 0) + bytes, MaxSavedUpAllowance);
+            }
+        }
+
+        public async ValueTask<byte[]> Download(string url) {
+            /* Send GET and await response with headers */
+            var response = await _client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+            response.EnsureSuccessStatusCode();
+            
+            int bytesRead;
+            var chunks = new List<byte[]>();
+            
+            /* Start processing data */
+            using (var stream = await response.Content.ReadAsStreamAsync()) {
+                while (true) {
+                    /* If allowance is active, wait for bytes to become available */
+                    if (_byteAllowance != null) {
+                        while (_byteAllowance == 0) {
+                            Thread.Sleep(100);
+                        }
+                    }
+
+                    /* Determine number of bytes to read */
+                    int bytesToRead;
+                    lock (_lock) {
+                        bytesToRead = Math.Min(BufferSize, _byteAllowance != null ? (int)_byteAllowance : int.MaxValue);
+                    }
+
+                    /* Read bytes and add as one chunk */
+                    bytesRead = await stream.ReadAsync(_buffer, 0, bytesToRead);
+                    if (bytesRead == 0) break; /* Exit reading loop if no bytes could be read */
+                    DownloadNotification?.Invoke(this, bytesRead);
+                    var chunk = new byte[bytesRead];
+                    for (var i = 0; i < bytesRead; i++) {
+                        chunk[i] = _buffer[i];
+                    }
+                    chunks.Add(chunk);
+                    
+                    /* Adjust allowance */
+                    if (_byteAllowance != null) {
+                        lock (_lock) {
+                            _byteAllowance = _byteAllowance - bytesRead;
+                        }
+                    }
+                }
+            }
+
+            /* Concat chunks into one byte array */
+            var totalBytes = chunks.Aggregate(0, (res, cur) => res + cur.Length);
+            var result = new byte[totalBytes];
+            var counter = 0;
+            foreach (var chunk in chunks) {
+                for (var i = 0; i < chunk.Length; i++) {
+                    result[counter + i] = chunk[i];
+                }
+                counter += chunk.Length;
+            }
+            return result;
+        }
+
+        ~MeteredHttpDownloader() {
+            _client.Dispose();
+        }
+    }
+
     public class Chunk {
         public int Index { get; set; }
-        public string? Url { get; set; }
-        public byte[]? Content { get; set; }
+        public string Url { get; set; }
+        public byte[] Content { get; set; }
         public bool Done { get; set; }
     }
 
@@ -236,13 +356,6 @@ namespace TwitchUnjail.Core.Managers {
         public int ChunksTotal { get; set; }
         public int ChunksDownloaded { get; set; }
         public int ChunksWritten { get; set; }
-        public int DownloadSpeedKBps { get; set; }
-        public int WriteSpeedKBps { get; set; }
-    }
-    
-    public class DownloadCompletedStatistics {
-        public double SecondsElapsed { get; set; }
-        public int ChunksTotal { get; set; }
         public int DownloadSpeedKBps { get; set; }
         public int WriteSpeedKBps { get; set; }
     }

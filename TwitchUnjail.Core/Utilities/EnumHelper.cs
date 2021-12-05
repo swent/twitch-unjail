@@ -4,9 +4,9 @@ using TwitchUnjail.Core.Models.Enums;
 
 namespace TwitchUnjail.Core.Utilities {
     
-    public class EnumHelper {
+    public static class EnumHelper {
 
-        public static FeedQuality FromKey(string? key) {
+        public static FeedQuality FeedQualityFromKey(string key) {
             switch (key?.ToLower()) {
                 case "audio_only":
                     return FeedQuality.AudioOnly;
@@ -34,11 +34,26 @@ namespace TwitchUnjail.Core.Utilities {
                     return FeedQuality.Q1440p30;
                 case "1440p60":
                     return FeedQuality.Q1440p60;
+                case "4Kp30":
+                    return FeedQuality.Q4Kp30;
+                case "4Kp60":
+                    return FeedQuality.Q4Kp60;
                 case "chunked":
                     return FeedQuality.Source;
                 default:
                     throw new Exception($"Feed quality unknown: {key ?? "NULL"}");
             }
+        }
+
+        public static string ToKey(this FeedQuality quality) {
+            var key = quality.ToString();
+            if (key == "AudioOnly") {
+                return "audio_only";
+            }
+            if (key == "Source") {
+                return "chunked";
+            }
+            return key.Substring(1).ToLower();
         }
     }
 }

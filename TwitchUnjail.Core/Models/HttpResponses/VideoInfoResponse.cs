@@ -8,6 +8,8 @@ namespace TwitchUnjail.Core.Models.HttpResponses {
         
         [JsonPropertyName("title")]
         public string Title { get; set; }
+        [JsonPropertyName("broadcast_id")]
+        public long BroadcastId { get; set; }
         [JsonPropertyName("game")]
         public string Game { get; set; }
         [JsonPropertyName("recorded_at")]

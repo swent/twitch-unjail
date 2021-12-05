@@ -7,6 +7,7 @@ namespace TwitchUnjail.Core.Utilities {
     
     public static class HttpHelper {
 
+        public const string DomainsUrl = "https://raw.githubusercontent.com/TwitchRecover/TwitchRecover/main/domains.txt";
         public const string UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.36 Safari/537.36";
 
         public static async Task<bool> IsUrlReachable(string url) {
@@ -26,7 +27,7 @@ namespace TwitchUnjail.Core.Utilities {
         public static async ValueTask<string[]> GetTwitchDomains() {
             using (var client = new HttpClient()) {
                 client.DefaultRequestHeaders.Add("User-Agent", UserAgent);
-                var response = await client.GetAsync("https://raw.githubusercontent.com/TwitchRecover/TwitchRecover/main/domains.txt");
+                var response = await client.GetAsync(DomainsUrl);
                 response.EnsureSuccessStatusCode();
                 return (await response.Content.ReadAsStringAsync())
                     .Split('\n')

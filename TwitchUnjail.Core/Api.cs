@@ -16,7 +16,7 @@ namespace TwitchUnjail.Core {
         private const string TokenUrl = "https://gql.twitch.tv/gql";
         private const string TwitchClientId = "kimne78kx3ncx6brgo4mv6wki5h1ko";
 
-        public static async ValueTask<VideoInfoResponse?> GetVideoInfo(string url) {
+        public static async ValueTask<VideoInfoResponse> GetVideoInfo(string url) {
             var videoId = GetVideoIdForUrl(url);
             
             using (var client = new HttpClient()) {
@@ -30,7 +30,7 @@ namespace TwitchUnjail.Core {
             }
         }
 
-        public static async ValueTask<PlaybackAccessTokenResponse?> GetPlaybackAccessToken(string id, bool isLive) {
+        public static async ValueTask<PlaybackAccessTokenResponse> GetPlaybackAccessToken(string id, bool isLive) {
             using (var client = new HttpClient()) {
                 client.DefaultRequestHeaders.Add("User-Agent", HttpHelper.UserAgent);
                 client.DefaultRequestHeaders.Add("Client-ID", TwitchClientId);

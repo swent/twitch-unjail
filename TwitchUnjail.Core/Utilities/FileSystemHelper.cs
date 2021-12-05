@@ -7,7 +7,7 @@ namespace TwitchUnjail.Core.Utilities {
     
     public static class FileSystemHelper {
 
-        private static HashSet<char>? _invalidCharsHash;
+        private static HashSet<char> _invalidCharsHash;
         private static HashSet<char> InvalidCharsHash =>
             _invalidCharsHash ??= new HashSet<char>(Path.GetInvalidFileNameChars());
 

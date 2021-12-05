@@ -29,7 +29,7 @@ namespace TwitchUnjail.Core {
             
             /* Validate token response */
             if (tokenResponse == null) {
-                throw new Exception("Could not aquire playback token. Try again later.");
+                throw new Exception("Could not acquire playback token. Try again later.");
             }
 
             /* Prepare domain checks for the vod */
@@ -44,7 +44,7 @@ namespace TwitchUnjail.Core {
 
             /* Wait for all url checks to finish */
             await Task.WhenAll(domainCheckTasks);
-            string? baseUrl = null;
+            string baseUrl = null;
             for (var i = 0; i < domainCheckTasks.Length; i++) {
                 if (domainCheckTasks[i].Result) {
                     baseUrl = domains[i] + "/" + urlMiddlePart;
@@ -63,7 +63,7 @@ namespace TwitchUnjail.Core {
                 /* Filter restricted feeds to known quality settings */
                 var feedQualities = tokenResponse.Data.VideoPlaybackAccessToken.ParsedValue.Chansub.RestrictedBitrates.Select(key => {
                     try {
-                        return (key, EnumHelper.FromKey(key));
+                        return (key, EnumHelper.FeedQualityFromKey(key));
                     } catch (Exception) {
                         return (null, FeedQuality.Q160p30)!;
                     }
@@ -83,12 +83,13 @@ namespace TwitchUnjail.Core {
                 for (var i = 0; i < lines.Length; i++) {
                     if (!lines[i].StartsWith("#EXT-X-MEDIA")) continue;
                     var qualityString = lines[i].Split(',').Skip(1).First().Split('"').Skip(1).First();
-                    feeds[EnumHelper.FromKey(qualityString)] = lines[i + 2];
+                    feeds[EnumHelper.FeedQualityFromKey(qualityString)] = lines[i + 2];
                 }
             }
 
             return new Vod(
                 videoId,
+                videoInfo.BroadcastId,
                 videoInfo.Title,
                 videoInfo.Channel.Name,
                 videoInfo.Channel.DisplayName,
@@ -97,13 +98,12 @@ namespace TwitchUnjail.Core {
                 feeds);
         }
 
-        public static async ValueTask DownloadVod(Vod vod, FeedQuality quality, string targetPath, string? targetFilename = null, DownloadProgressTracker? progressTracker = null) {
+        public static async ValueTask DownloadVod(string feedUrl, FeedQuality quality, string targetPath, string targetFilename, int? targetKbps, DownloadProgressTracker progressTracker = null) {
             /* Pick url and load the m3u8 file */
-            var qualityFeedUrl = vod.Feeds[quality];
-            var baseUrl = string.Join("/", qualityFeedUrl
+            var baseUrl = string.Join("/", feedUrl
                 .Split('/')
                 .SkipLast(1));
-            var m3U8 = await HttpHelper.GetHttp(qualityFeedUrl);
+            var m3U8 = await HttpHelper.GetHttp(feedUrl);
 
             /* Map m3u8 entries to absolute download url for each chunk */
             var chunks = m3U8
@@ -118,39 +118,125 @@ namespace TwitchUnjail.Core {
                 chunks,
                 Path.Combine(
                     FileSystemHelper.EnsurePathWithoutTrailingDelimiter(targetPath),
-                    targetFilename ?? GenerateVodFilename(vod)));
-            await manager.Start(PickDownloaderThreadCountByQuality(quality), progressTracker);
+                    targetFilename));
+            await manager.Start(PickDownloaderThreadCountByQualityAndTargetSpeed(quality, targetKbps), targetKbps, progressTracker);
         }
 
-        private static string GenerateVodFilename(Vod vod) {
-            var secondOfDayIdentifier =
-                vod.RecordDate.Hour * 3600 + vod.RecordDate.Minute * 60 + vod.RecordDate.Second;
-            return FileSystemHelper.StripInvalidChars(
-                $"{vod.RecordDate.ToString("dd-MM-yyyy")} - {vod.ChannelDisplayName} - {vod.Title} ({secondOfDayIdentifier}).mp4");
+        public static async ValueTask<Dictionary<FeedQuality, string>> RecoverVodFeeds(VodRecoveryInfo ttInfo) {
+            var domains = await HttpHelper.GetTwitchDomains();
+
+            /* Brute-force +-60 seconds around given record time to find valid vod url */
+            string reachableUrl = null;
+            var increment = 0;
+            while (increment <= 60) {
+                var timestamp = DateHelper.ToUnixTimestamp(ttInfo.RecordDate + TimeSpan.FromSeconds(increment));
+                var baseUrl = GenerateVodBaseUrl(ttInfo.ChannelName, ttInfo.BroadcastId, timestamp);
+                var urlsToCheck = domains
+                    .Select(domain => $"{domain}/{baseUrl}/chunked/index-dvr.m3u8")
+                    .ToArray();
+                var tasks = urlsToCheck
+                    .Select(url => HttpHelper.IsUrlReachable(url))
+                    .ToArray();
+                await Task.WhenAll(tasks);
+                for (var i = 0; i < tasks.Length; i++) {
+                    if (tasks[i].Result) {
+                        reachableUrl = $"{domains[i]}/{baseUrl}";
+                        increment = -10000;
+                        break;
+                    }
+                }
+                if (increment > 0) {
+                    increment *= -1;
+                } else {
+                    increment = increment * -1 + 1;
+                }
+            }
+
+            if (reachableUrl == null) {
+                return null;
+            } else {
+                /* Use all qualities to brute-force which of them are reachable for the found vod-url */
+                var qualities = new[] {
+                    FeedQuality.Source,
+                    FeedQuality.Q4Kp60,
+                    FeedQuality.Q4Kp30,
+                    FeedQuality.Q1440p60,
+                    FeedQuality.Q1440p30,
+                    FeedQuality.Q1080p60,
+                    FeedQuality.Q1080p30,
+                    FeedQuality.Q720p60,
+                    FeedQuality.Q720p30,
+                    FeedQuality.Q480p60,
+                    FeedQuality.Q480p30,
+                    FeedQuality.Q360p60,
+                    FeedQuality.Q360p30,
+                    FeedQuality.Q160p30,
+                    FeedQuality.Q144p30,
+                    FeedQuality.AudioOnly, }
+                    .Select(quality => (quality, quality.ToKey()))
+                    .ToArray();
+                var urlsToCheck = qualities
+                    .Select(quality => $"{reachableUrl}/{quality.Item2}/index-dvr.m3u8")
+                    .ToArray();
+                var tasks = urlsToCheck
+                    .Select(url => HttpHelper.IsUrlReachable(url))
+                    .ToArray();
+                await Task.WhenAll(tasks);
+                var vodFeeds = new Dictionary<FeedQuality, string>();
+                for (var i = 0; i < tasks.Length; i++) {
+                    if (tasks[i].Result) {
+                        vodFeeds[qualities[i].quality] = urlsToCheck[i];
+                    }
+                }
+                return vodFeeds;
+            }
         }
 
-        private static int PickDownloaderThreadCountByQuality(FeedQuality quality) {
+        private static string GenerateVodBaseUrl(string channelName, long broadcastId, long timestamp) {
+            var baseUrl = $"{channelName}_{broadcastId}_{timestamp}";
+            var hash = HashHelper.GetSha1Hash(baseUrl);
+            return $"{hash.Substring(0, 20).ToLower()}_{baseUrl}";
+        }
+
+
+
+        private static int PickDownloaderThreadCountByQualityAndTargetSpeed(FeedQuality quality, int? targetKbps) {
+            /* Use a multiplier based on target speed */
+            var speedMult = 1.0;
+            if (targetKbps != null) {
+                if (targetKbps < 1024) {
+                    speedMult = 0.51;
+                } else if (targetKbps < 5 * 1024) {
+                    speedMult = 0.67;
+                } else if (targetKbps < 15 * 1024) {
+                    speedMult = 0.76;
+                } else if (targetKbps < 30 * 1024) {
+                    speedMult = 0.88;
+                }
+            }
+
+            /* Use a base value from quality */
             switch (quality) {
                 case FeedQuality.Q4Kp60:
                 case FeedQuality.Q4Kp30:
                 case FeedQuality.Q1440p60:
                 case FeedQuality.Q1440p30:
-                    return 6;
+                    return (int)(6 * speedMult);
                 case FeedQuality.Q1080p60:
                 case FeedQuality.Q1080p30:
                 case FeedQuality.Source:
-                    return 8;
+                    return (int)(8 * speedMult);
                 case FeedQuality.Q720p60:
                 case FeedQuality.Q720p30:
-                    return 10;
+                    return (int)(10 * speedMult);
                 case FeedQuality.Q480p60:
                 case FeedQuality.Q480p30:
-                    return 12;
+                    return (int)(12 * speedMult);
                 case FeedQuality.Q360p60:
                 case FeedQuality.Q360p30:
-                    return 14;
+                    return (int)(14 * speedMult);
                 default:
-                    return 20;
+                    return (int)(20 * speedMult);
             }
         }
     }

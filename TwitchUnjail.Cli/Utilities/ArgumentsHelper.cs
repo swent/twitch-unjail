@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,9 +9,9 @@ using TwitchUnjail.Core.Models.Enums;
 
 namespace TwitchUnjail.Cli.Utilities {
     
-    public class ArgumentsHelper {
+    public static class ArgumentsHelper {
 
-        public static FeedQuality QualityFromString(string? input) {
+        public static FeedQuality QualityFromString(string input) {
             switch (input?.ToLower()) {
                 case "audioonly":
                     return FeedQuality.AudioOnly;
@@ -65,12 +66,14 @@ namespace TwitchUnjail.Cli.Utilities {
             return text;
         }
 
-        public static T? SearchArgument<T>(string[] args, string key) {
-            string? type;
-            if (typeof(T) == typeof(bool)) {
+        public static T SearchArgument<T>(string[] args, string key) {
+            string type;
+            if (typeof(T) == typeof(bool) || typeof(T) == typeof(bool?)) {
                 type = "bool";
-            } else if (typeof(T) == typeof(int)) {
+            } else if (typeof(T) == typeof(int) || typeof(T) == typeof(int?)) {
                 type = "int";
+            } else if (typeof(T) == typeof(double) || typeof(T) == typeof(double?)) {
+                type = "double";
             } else if (typeof(T) == typeof(string)) {
                 type = "string";
             } else {
@@ -85,18 +88,27 @@ namespace TwitchUnjail.Cli.Utilities {
                         case "bool":
                             if (args.Length - 1 > i && !args[i + 1].StartsWith("-")) {
                                 if (args[i + 1] == "true") {
-                                    return (T?)(object)true;
+                                    return (T)(object)true;
                                 } if (args[i + 1] == "false") {
-                                    return (T?)(object)false;
+                                    return (T)(object)false;
                                 }
                                 throw new Exception($"Invalid value for argument '{args[i]}': {args[i + 1]}");
                             } else {
-                                return (T?)(object)true;
+                                return (T)(object)true;
                             }
                         case "int":
                             if (args.Length - 1 > i && !args[i + 1].StartsWith("-")) {
                                 if (int.TryParse(args[i + 1], out var intValue)) {
-                                    return (T?)(object)intValue;
+                                    return (T)(object)intValue;
+                                }
+                                throw new Exception($"Invalid value for argument '{args[i]}': {args[i + 1]}");
+                            } else {
+                                throw new Exception($"No value given for argument '{args[i]}'");
+                            }
+                        case "double":
+                            if (args.Length - 1 > i && !args[i + 1].StartsWith("-")) {
+                                if (double.TryParse(args[i + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out var floatValue)) {
+                                    return (T)(object)floatValue;
                                 }
                                 throw new Exception($"Invalid value for argument '{args[i]}': {args[i + 1]}");
                             } else {
@@ -104,7 +116,7 @@ namespace TwitchUnjail.Cli.Utilities {
                             }
                         case "string":
                             if (args.Length - 1 > i && !args[i + 1].StartsWith("-")) {
-                                return (T?)(object)args[i + 1];
+                                return (T)(object)args[i + 1];
                             } else {
                                 throw new Exception($"No value given for argument '{args[i]}'");
                             }

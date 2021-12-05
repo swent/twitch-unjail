@@ -5,7 +5,7 @@
         <TargetFramework>net6.0</TargetFramework>
         <RootNamespace>TwitchUnjail.Cli</RootNamespace>
         <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
+        <Nullable>disable</Nullable>
         <AssemblyName>TwitchUnjail.Cli</AssemblyName>
         <AssemblyVersion>1.0.0</AssemblyVersion>
         <FileVersion>1.0.0</FileVersion>

@@ -4,10 +4,9 @@ using System.Text;
 
 namespace TwitchUnjail.Core.Utilities {
     
-    public class HashHelper {
+    public static class HashHelper {
         
         public static string GetSha1Hash(string input) {
-
             using (var alg = HashAlgorithm.Create("SHA1")) {
                 if (alg == null) {
                     throw new Exception("Unable to instantiate sha1 hash generator.");
