@@ -1,5 +1,5 @@
 # TwitchUnjail
-Twitch vod downloader offering good speeds and low cpu utilization.
+Twitch vod downloader offering good speeds and low cpu utilization. Supports recovering vods using twitchtracker.com or streamscharts.com links.
 
 Application can either be controlled via command line arguments or by entering requested data while the app is running.
 
@@ -18,6 +18,7 @@ Required arguments:
 Optional arguments:
 - `--quality QUALITY` or `-q QUALITY` the quality setting used for the download (see quality section below), will default to `source` quality if not used
 - `--name NAME` or `-n NAME` the download file name to use, will default to an auto-generated name if not used
+- `--mbps SPEED` the megabyte(s) per second download speed to aim for (careful: NOT megabit/s), will default to unlimited if not used
 
 # Entering data while app is running
 
@@ -53,8 +54,10 @@ Settings that can be used in the app.
 
 # Run Examples
 
-`TwitchUnjail-1.0-rc1-win64.exe`
+`TwitchUnjail-1.0-rc2-win64.exe`
 
-`TwitchUnjail-1.0-rc1-win64.exe --vod https://www.twitch.tv/videos/11111111 --output C:\twitch`
+`TwitchUnjail-1.0-rc2-win64.exe --vod https://www.twitch.tv/videos/11111111 --output C:\twitch`
 
-`TwitchUnjail-1.0-rc1-win64.exe --vod https://www.twitch.tv/videos/11111111 -q 720p -o C:\twitch`
+`TwitchUnjail-1.0-rc2-win64.exe --vod https://www.twitch.tv/videos/11111111 -q 720p -o C:\twitch`
+
+`TwitchUnjail-1.0-rc2-win64.exe --vod https://www.twitch.tv/videos/11111111 -mbps 7.5 -o C:\twitch`
