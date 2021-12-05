@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TwitchUnjail.Cli", "TwitchUnjail.Cli\TwitchUnjail.Cli.csproj", "{7A208A17-6F32-491A-9E46-AB88268BBCE3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TwitchUnjail.Core", "TwitchUnjail.Core\TwitchUnjail.Core.csproj", "{EAB21F38-2003-4B93-A671-D0364E406D46}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7A208A17-6F32-491A-9E46-AB88268BBCE3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7A208A17-6F32-491A-9E46-AB88268BBCE3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7A208A17-6F32-491A-9E46-AB88268BBCE3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7A208A17-6F32-491A-9E46-AB88268BBCE3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EAB21F38-2003-4B93-A671-D0364E406D46}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EAB21F38-2003-4B93-A671-D0364E406D46}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EAB21F38-2003-4B93-A671-D0364E406D46}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EAB21F38-2003-4B93-A671-D0364E406D46}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
