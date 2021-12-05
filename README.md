@@ -3,6 +3,12 @@ Twitch vod downloader offering good speeds and low cpu utilization.
 
 Application can either be controlled via command line arguments or by entering requested data while the app is running.
 
+# Downloads
+
+- [v1.0-rc1 windows x64](https://github.com/swent/twitch-unjail/releases/download/v1.0-rc1/TwitchUnjail-1.0-rc1-win64.exe)
+- [v1.0-rc1 linux x64](https://github.com/swent/twitch-unjail/releases/download/v1.0-rc1/TwitchUnjail-1.0-rc1-linux64)
+- [v1.0-rc1 osx x64](https://github.com/swent/twitch-unjail/releases/download/v1.0-rc1/TwitchUnjail-1.0-rc1-osx64)
+
 # Using command line arguments
 
 Required arguments:
@@ -47,8 +53,8 @@ Settings that can be used in the app.
 
 # Run Examples
 
-`TwitchUnfail-1.0-rc1.exe`
+`TwitchUnjail-1.0-rc1-win64.exe`
 
-`TwitchUnfail-1.0-rc1.exe --vod https://www.twitch.tv/videos/11111111 --output C:\twitch`
+`TwitchUnjail-1.0-rc1-win64.exe --vod https://www.twitch.tv/videos/11111111 --output C:\twitch`
 
-`TwitchUnfail-1.0-rc1.exe --vod https://www.twitch.tv/videos/11111111 -q 720p -o C:\twitch`
+`TwitchUnjail-1.0-rc1-win64.exe --vod https://www.twitch.tv/videos/11111111 -q 720p -o C:\twitch`
