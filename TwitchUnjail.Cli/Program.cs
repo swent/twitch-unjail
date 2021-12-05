@@ -1,6 +1,4 @@
-﻿// See https://aka.ms/new-console-template for more information
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -13,17 +11,12 @@ using TwitchUnjail.Core.Models.Enums;
 using TwitchUnjail.Core.Utilities;
 
 namespace TwitchUnjail.Cli {
-
-    class Cli {
+    internal static class Cli {
         
-        const string vid = "https://www.twitch.tv/videos/1221930435";
         private const int ProgressBarSegments = 40;
-        
-        static async Task<int> Main(string[] args) {
 
-            // var a = await VodHandler.RecoverVodFeeds("https://twitchtracker.com/minpojke/streams/43953806636");
-            // return 0;
-            
+        private static async Task<int> Main(string[] args) {
+
             try {
                 var vodUrl = ArgumentsHelper.SearchArgument<string>(args, "vod");
 
@@ -41,6 +34,7 @@ namespace TwitchUnjail.Cli {
                     var outFile = ArgumentsHelper.SearchArgument<string>(args, "name")
                                   ?? ArgumentsHelper.SearchArgument<string>(args, "n");
                     
+                    /* mbps usually refers to mbit per second which is not what we're using it as here, find a better argument name? */
                     var mbytePerSecond = ArgumentsHelper.SearchArgument<double?>(args, "mbps");
 
                     if (string.IsNullOrEmpty(outPath)) {
@@ -113,18 +107,18 @@ namespace TwitchUnjail.Cli {
             /* Check if direct vod download or recovery via twitchtracker.com */
             string outFile;
             Dictionary<FeedQuality, string> availableQualities;
-            if (vodUrl.StartsWith("https://www.twitch.tv/")) {
+            if (vodUrl != null && vodUrl.StartsWith("https://www.twitch.tv/")) {
                 /* Retrieve vod */
                 var vodInfo = await VodHandler.RetrieveVodInformation(vodUrl);
                 availableQualities = vodInfo.Feeds;
                 outFile = GenerateDefaultVodFilename(vodInfo);
             } else {
                 VodRecoveryInfo recoveryInfo;
-                if (vodUrl.StartsWith("https://twitchtracker.com/")) {
+                if (vodUrl != null && vodUrl.StartsWith("https://twitchtracker.com/")) {
                     Console.WriteLine("Switching to recovery mode.");
                     /* Retrieve recovery info */
                     recoveryInfo = await TwitchTrackerHandler.RetrieveInfo(vodUrl);
-                } else if (vodUrl.StartsWith("https://streamscharts.com/")) {
+                } else if (vodUrl != null && vodUrl.StartsWith("https://streamscharts.com/")) {
                     Console.WriteLine("Switching to recovery mode.");
                     /* Retrieve recovery info */
                     recoveryInfo = await StreamsChartsHandler.RetrieveInfo(vodUrl);
@@ -173,10 +167,11 @@ namespace TwitchUnjail.Cli {
 
         private static bool _progressInitialized;
         private static int _lastSegmentsDone = -1;
-        static void OnDownloadProgressUpdate(DownloadProgressUpdateEventArgs eventArgs) {
+
+        private static void OnDownloadProgressUpdate(DownloadProgressUpdateEventArgs eventArgs) {
             var factorDone = eventArgs.ChunksWritten / (double)eventArgs.ChunksTotal;
             var segmentsDone = (int)Math.Round(ProgressBarSegments * factorDone);
-            var segmentString = Enumerable.Range(0, segmentsDone).Aggregate("", (res, _) => res += "#");
+            var segmentString = Enumerable.Range(0, segmentsDone).Aggregate("", (res, _) => res + "#");
 
             var percentDone = (factorDone * 100).ToString("F1", CultureInfo.InvariantCulture);
             

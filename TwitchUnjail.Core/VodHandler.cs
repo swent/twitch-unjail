@@ -1,13 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using TwitchUnjail.Core.Managers;
 using TwitchUnjail.Core.Models;
 using TwitchUnjail.Core.Models.Enums;
-using TwitchUnjail.Core.Models.HttpResponses;
 using TwitchUnjail.Core.Utilities;
 
 namespace TwitchUnjail.Core {
@@ -197,8 +195,6 @@ namespace TwitchUnjail.Core {
             var hash = HashHelper.GetSha1Hash(baseUrl);
             return $"{hash.Substring(0, 20).ToLower()}_{baseUrl}";
         }
-
-
 
         private static int PickDownloaderThreadCountByQualityAndTargetSpeed(FeedQuality quality, int? targetKbps) {
             /* Use a multiplier based on target speed */

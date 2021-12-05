@@ -12,37 +12,34 @@ namespace TwitchUnjail.Core.Utilities {
 
         public static async Task<bool> IsUrlReachable(string url) {
             try {
-                using (var client = new HttpClient()) {
-                    client.DefaultRequestHeaders.Add("User-Agent", UserAgent);
-                    client.DefaultRequestHeaders.Add("Client-ID", "kimne78kx3ncx6brgo4mv6wki5h1ko");
-                    var response = await client.GetAsync(url);
-                    response.EnsureSuccessStatusCode();
-                    return true;
-                }
+                using var client = new HttpClient();
+                client.DefaultRequestHeaders.Add("User-Agent", UserAgent);
+                client.DefaultRequestHeaders.Add("Client-ID", "kimne78kx3ncx6brgo4mv6wki5h1ko");
+                var response = await client.GetAsync(url);
+                response.EnsureSuccessStatusCode();
+                return true;
             } catch (Exception) {
                 return false;
             }
         }
 
         public static async ValueTask<string[]> GetTwitchDomains() {
-            using (var client = new HttpClient()) {
-                client.DefaultRequestHeaders.Add("User-Agent", UserAgent);
-                var response = await client.GetAsync(DomainsUrl);
-                response.EnsureSuccessStatusCode();
-                return (await response.Content.ReadAsStringAsync())
-                    .Split('\n')
-                    .Select(d => d.Trim())
-                    .ToArray();
-            }
+            using var client = new HttpClient();
+            client.DefaultRequestHeaders.Add("User-Agent", UserAgent);
+            var response = await client.GetAsync(DomainsUrl);
+            response.EnsureSuccessStatusCode();
+            return (await response.Content.ReadAsStringAsync())
+                .Split('\n')
+                .Select(d => d.Trim())
+                .ToArray();
         }
         
         public static async ValueTask<string> GetHttp(string url) {
-            using (var client = new HttpClient()) {
-                client.DefaultRequestHeaders.Add("User-Agent", UserAgent);
-                var response = await client.GetAsync(url);
-                response.EnsureSuccessStatusCode();
-                return await response.Content.ReadAsStringAsync();
-            }
+            using var client = new HttpClient();
+            client.DefaultRequestHeaders.Add("User-Agent", UserAgent);
+            var response = await client.GetAsync(url);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadAsStringAsync();
         }
     }
 }

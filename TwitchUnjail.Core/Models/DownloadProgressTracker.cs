@@ -1,5 +1,4 @@
 using System;
-using System.ComponentModel;
 using TwitchUnjail.Core.Managers;
 
 namespace TwitchUnjail.Core.Models {

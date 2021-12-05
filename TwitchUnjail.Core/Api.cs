@@ -18,26 +18,24 @@ namespace TwitchUnjail.Core {
 
         public static async ValueTask<VideoInfoResponse> GetVideoInfo(string url) {
             var videoId = GetVideoIdForUrl(url);
-            
-            using (var client = new HttpClient()) {
-                client.DefaultRequestHeaders.Add("User-Agent", HttpHelper.UserAgent);
-                client.DefaultRequestHeaders.Add("Accept", "application/vnd.twitchtv.v5+json");
-                client.DefaultRequestHeaders.Add("Client-ID", TwitchClientId);
-                var response = await client.GetAsync($"{ApiUrl}/kraken/videos/{videoId}");
-                response.EnsureSuccessStatusCode();
-                var content = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<VideoInfoResponse>(content);
-            }
+
+            using var client = new HttpClient();
+            client.DefaultRequestHeaders.Add("User-Agent", HttpHelper.UserAgent);
+            client.DefaultRequestHeaders.Add("Accept", "application/vnd.twitchtv.v5+json");
+            client.DefaultRequestHeaders.Add("Client-ID", TwitchClientId);
+            var response = await client.GetAsync($"{ApiUrl}/kraken/videos/{videoId}");
+            response.EnsureSuccessStatusCode();
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonSerializer.Deserialize<VideoInfoResponse>(content);
         }
 
         public static async ValueTask<PlaybackAccessTokenResponse> GetPlaybackAccessToken(string id, bool isLive) {
-            using (var client = new HttpClient()) {
-                client.DefaultRequestHeaders.Add("User-Agent", HttpHelper.UserAgent);
-                client.DefaultRequestHeaders.Add("Client-ID", TwitchClientId);
-                var response = await client.PostAsJsonAsync(TokenUrl, new PlaybackAccessTokenRequest(isLive, id));
-                response.EnsureSuccessStatusCode();
-                return JsonSerializer.Deserialize<PlaybackAccessTokenResponse>(await response.Content.ReadAsStringAsync());
-            }
+            using var client = new HttpClient();
+            client.DefaultRequestHeaders.Add("User-Agent", HttpHelper.UserAgent);
+            client.DefaultRequestHeaders.Add("Client-ID", TwitchClientId);
+            var response = await client.PostAsJsonAsync(TokenUrl, new PlaybackAccessTokenRequest(isLive, id));
+            response.EnsureSuccessStatusCode();
+            return JsonSerializer.Deserialize<PlaybackAccessTokenResponse>(await response.Content.ReadAsStringAsync());
         }
 
         public static long GetVideoIdForUrl(string url) {

@@ -1,10 +1,5 @@
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
-using System.Runtime.CompilerServices;
-using System.Threading;
-using System.Threading.Tasks;
 using TwitchUnjail.Core.Models.Enums;
 
 namespace TwitchUnjail.Cli.Utilities {
@@ -60,10 +55,7 @@ namespace TwitchUnjail.Cli.Utilities {
 
         public static string QualityEnumToDisplayText(FeedQuality quality) {
             var text = quality.ToString();
-            if (text.StartsWith("Q")) {
-                return text.Substring(1);
-            }
-            return text;
+            return text.StartsWith("Q") ? text[1..] : text;
         }
 
         public static T SearchArgument<T>(string[] args, string key) {
