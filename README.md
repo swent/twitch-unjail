@@ -1,7 +1,7 @@
 # TwitchUnjail
 Twitch vod downloader offering good speeds and low cpu utilization. Supports recovering vods using twitchtracker.com or streamscharts.com links.
 
-Application can either be controlled via command line arguments or by entering requested data while the app is running.
+Application can either be controlled via command line arguments or by entering data interactivly.
 
 # Downloads
 
@@ -20,7 +20,7 @@ Optional arguments:
 - `--name NAME` or `-n NAME` the download file name to use, will default to an auto-generated name if not used
 - `--mbps SPEED` the megabyte(s) per second download speed to aim for (careful: NOT megabit/s), will default to unlimited if not used
 
-# Entering data while app is running
+# Interactive mode
 
 - Run the app
 - It will ask to enter the vod url to download, enter/paste it and press enter
