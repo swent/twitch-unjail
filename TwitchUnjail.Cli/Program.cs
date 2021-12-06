@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using TwitchUnjail.Cli.Utilities;
@@ -29,17 +30,14 @@ namespace TwitchUnjail.Cli {
                                   ?? ArgumentsHelper.SearchArgument<string>(args, "q")
                                   ?? "source";
                     var outPath = ArgumentsHelper.SearchArgument<string>(args, "output")
-                                  ?? ArgumentsHelper.SearchArgument<string>(args, "o");
+                                  ?? ArgumentsHelper.SearchArgument<string>(args, "o")
+                                  ?? Directory.GetCurrentDirectory();
 
                     var outFile = ArgumentsHelper.SearchArgument<string>(args, "name")
                                   ?? ArgumentsHelper.SearchArgument<string>(args, "n");
                     
                     /* mbps usually refers to mbit per second which is not what we're using it as here, find a better argument name? */
                     var mbytePerSecond = ArgumentsHelper.SearchArgument<double?>(args, "mbps");
-
-                    if (string.IsNullOrEmpty(outPath)) {
-                        throw new Exception("No output path has been set, use the '--output' or '-o' arguments");
-                    }
 
                     /* Check if direct vod download or recovery via twitchtracker.com */
                     Dictionary<FeedQuality, string> availableQualities;
@@ -104,7 +102,7 @@ namespace TwitchUnjail.Cli {
             Console.Write("Enter the vod url to download: ");
             var vodUrl = Console.ReadLine();
             
-            /* Check if direct vod download or recovery via twitchtracker.com */
+            /* Check if direct vod download or recovery */
             string outFile;
             Dictionary<FeedQuality, string> availableQualities;
             if (vodUrl != null && vodUrl.StartsWith("https://www.twitch.tv/")) {
@@ -133,7 +131,7 @@ namespace TwitchUnjail.Cli {
                 outFile = GenerateRecoveredVodFilename(recoveryInfo);
             }
 
-            /* Select quality */
+            /* Quality */
             Console.WriteLine(string.Empty);
             Console.WriteLine($"Available qualities: {string.Join(", ", availableQualities.Keys.Select(key => ArgumentsHelper.QualityEnumToDisplayText(key)))}");
             FeedQuality? enumQuality;
@@ -152,9 +150,11 @@ namespace TwitchUnjail.Cli {
                 }
             } while (enumQuality == null);
 
+            /* Path */
             Console.WriteLine(string.Empty);
-            Console.Write("Enter the download path: ");
+            Console.Write($"Enter the download path: ({Directory.GetCurrentDirectory()})");
             var outPath = Console.ReadLine();
+            if (string.IsNullOrEmpty(outPath)) outPath = Directory.GetCurrentDirectory();
             
             /* Start download */
             var progressTracker = new DownloadProgressTracker(OnDownloadProgressUpdate);

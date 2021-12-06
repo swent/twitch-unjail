@@ -25,17 +25,18 @@ namespace TwitchUnjail.Core.Managers {
         
         public ConcurrentQueue<Chunk> Chunks { get; }
         public string TargetFilePath { get; }
-        
+
+        private int _targetFiles;
         private bool _running;
+        private Exception _encounteredException;
         private DownloadProgressTracker _progressTracker;
         private DateTime _startTime;
         private Task _finishedTask;
-        private Exception _encounteredException;
         private int _finishedIndex;
         private int _lastIndex;
         private ConcurrentDictionary<int, Chunk> _doneQueue;
-        private FileStream _stream;
-        private BinaryWriter _writer;
+        private FileStream[] _stream;
+        private BinaryWriter[] _writer;
         private Timer _progressTimer;
         private Timer _allowanceTimer;
         private int _targetKbps;
@@ -44,11 +45,17 @@ namespace TwitchUnjail.Core.Managers {
         private ConcurrentDictionary<DateTime, long> _bytesWrittenTracker;
         private (Thread, MeteredHttpDownloader)[] _threads;
 
-        public ChunkedDownloadManager(IOrderedEnumerable<string> urlsToDownload, string targetFilePath) {
-            var counter = 0;
+        public ChunkedDownloadManager(string[][] urlsToDownload, string targetFilePath) {
+            var fileCounter = -1;
+            var chunkCounter = 0;
             Chunks = new ConcurrentQueue<Chunk>(urlsToDownload
-                .Select(url => new Chunk { Index = counter++, Url = url }));
+                .SelectMany(urls => {
+                    fileCounter++;
+                    return urls
+                        .Select(url => new Chunk { FileIndex = fileCounter, Index = chunkCounter++, Url = url });
+                }));
             TargetFilePath = targetFilePath;
+            _targetFiles = fileCounter + 1;
             _running = false;
             _progressTimer = new Timer();
             _progressTimer.Interval = 400.0;
@@ -73,8 +80,12 @@ namespace TwitchUnjail.Core.Managers {
             _lastIndex = Chunks.Count - 1;
             _doneQueue = new ConcurrentDictionary<int, Chunk>();
             Directory.CreateDirectory(Path.GetDirectoryName(TargetFilePath)!);
-            _stream = new FileStream(TargetFilePath, FileMode.Create);
-            _writer = new BinaryWriter(_stream, Encoding.UTF8);
+            _stream = new FileStream[_targetFiles];
+            _writer = new BinaryWriter[_targetFiles];
+            for (var i = 0; i < _targetFiles; i++) {
+                _stream[i] = new FileStream(GetPartedFilename(i), FileMode.Create);
+                _writer[i] = new BinaryWriter(_stream[i], Encoding.UTF8);
+            }
             if (targetKbps != null) {
                 StartAllowanceTimer(threads);
                 _targetKbps = (int)targetKbps;
@@ -97,8 +108,10 @@ namespace TwitchUnjail.Core.Managers {
             if (progressTracker != null) {
                 _progressTimer.Stop();
             }
-            await _writer.DisposeAsync();
-            await _stream.DisposeAsync();
+            for (var i = 0; i < _targetFiles; i++) {
+                await _writer[i].DisposeAsync();
+                await _stream[i].DisposeAsync();
+            }
             if (targetKbps != null) {
                 _allowanceTimer.Stop();
             }
@@ -119,6 +132,14 @@ namespace TwitchUnjail.Core.Managers {
             _allowanceTimer.AutoReset = true;
             _allowanceTimer.Elapsed += OnAllowanceTimerElapsed;
             _allowanceTimer.Start();
+        }
+        
+        private string GetPartedFilename(int fileIndex) {
+            if (_targetFiles == 1) {
+                return TargetFilePath;
+            }
+            var parts = TargetFilePath.Split('.');
+            return string.Join(".", parts.Take(parts.Length - 1)) + $".{fileIndex + 1}.{parts.Last()}";
         }
 
         private async void DoWork(object threadIndex) {
@@ -146,7 +167,7 @@ namespace TwitchUnjail.Core.Managers {
         }
 
         private void MarkFinished(Chunk chunk) {
-            _doneQueue![chunk.Index] = chunk;
+            _doneQueue[chunk.Index] = chunk;
             chunk.Done = true;
             
             /* Check if this thread passed in the next chunk we are waiting for, if so go into write logic */
@@ -154,8 +175,8 @@ namespace TwitchUnjail.Core.Managers {
                 var counter = _finishedIndex + 1;
                 while (_doneQueue.TryGetValue(counter, out var writeChunk)) {
                     _finishedIndex = counter - 1;
-                    _writer!.Write(writeChunk.Content!);
-                    _bytesWrittenTracker[DateTime.Now] = writeChunk.Content!.Length;
+                    _writer[writeChunk.FileIndex].Write(writeChunk.Content);
+                    _bytesWrittenTracker[DateTime.Now] = writeChunk.Content.Length;
                     if (_doneQueue.Remove(writeChunk.Index, out var temp)) {
                         temp.Content = null;
                     }
@@ -213,7 +234,7 @@ namespace TwitchUnjail.Core.Managers {
         private DownloadProgressUpdateEventArgs GenerateProgressUpdateEventArgs() {
             var total = _lastIndex + 1;
             var written = _finishedIndex + 1;
-            var downloaded = written + _doneQueue!.Count;
+            var downloaded = written + _doneQueue.Count;
 
             /* Calculate download speed */
             var downloadEntries = _bytesDownloadedTracker.ToArray();
@@ -344,6 +365,7 @@ namespace TwitchUnjail.Core.Managers {
     }
 
     public class Chunk {
+        public int FileIndex { get; set; }
         public int Index { get; set; }
         public string Url { get; set; }
         public byte[] Content { get; set; }

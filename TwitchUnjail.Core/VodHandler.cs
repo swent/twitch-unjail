@@ -30,34 +30,34 @@ namespace TwitchUnjail.Core {
                 throw new Exception("Could not acquire playback token. Try again later.");
             }
 
-            /* Prepare domain checks for the vod */
-            var urlMiddlePart = videoInfo.SeekPreviewsUrl
-                .Split('/')
-                .Skip(3)
-                .First();
-            var domains = await HttpHelper.GetTwitchDomains();
-            var domainCheckTasks = domains
-                .Select(domain => HttpHelper.IsUrlReachable($"{domain}/{urlMiddlePart}/chunked/index-dvr.m3u8"))
-                .ToArray();
-
-            /* Wait for all url checks to finish */
-            await Task.WhenAll(domainCheckTasks);
-            string baseUrl = null;
-            for (var i = 0; i < domainCheckTasks.Length; i++) {
-                if (domainCheckTasks[i].Result) {
-                    baseUrl = domains[i] + "/" + urlMiddlePart;
-                    break;
-                }
-            }
-
-            /* Validate baseUrl found */
-            if (string.IsNullOrEmpty(baseUrl)) {
-                throw new Exception("No reachable domain for vod found. Try again later.");
-            }
-
             /* Obtain a list of feeds / qualities */
             Dictionary<FeedQuality, string> feeds;
             if (tokenResponse.Data.VideoPlaybackAccessToken.ParsedValue.Chansub.RestrictedBitrates.Length > 0) {
+                /* Prepare domain checks for the vod */
+                var urlMiddlePart = videoInfo.SeekPreviewsUrl
+                    .Split('/')
+                    .Skip(3)
+                    .First();
+                var domains = await HttpHelper.GetTwitchDomains();
+                var domainCheckTasks = domains
+                    .Select(domain => HttpHelper.IsUrlReachable($"{domain}/{urlMiddlePart}/chunked/index-dvr.m3u8"))
+                    .ToArray();
+
+                /* Wait for all url checks to finish */
+                await Task.WhenAll(domainCheckTasks);
+                string baseUrl = null;
+                for (var i = 0; i < domainCheckTasks.Length; i++) {
+                    if (domainCheckTasks[i].Result) {
+                        baseUrl = domains[i] + "/" + urlMiddlePart;
+                        break;
+                    }
+                }
+
+                /* Validate baseUrl found */
+                if (string.IsNullOrEmpty(baseUrl)) {
+                    throw new Exception("No reachable domain for vod found. Try again later.");
+                }
+                
                 /* Filter restricted feeds to known quality settings */
                 var feedQualities = tokenResponse.Data.VideoPlaybackAccessToken.ParsedValue.Chansub.RestrictedBitrates.Select(key => {
                     try {
@@ -104,16 +104,13 @@ namespace TwitchUnjail.Core {
             var m3U8 = await HttpHelper.GetHttp(feedUrl);
 
             /* Map m3u8 entries to absolute download url for each chunk */
-            var chunks = m3U8
-                .Split('\n')
-                .Select(line => line.Trim())
-                .Where(line => line.Length > 0 && line[0] != '#')
-                .Select(line => $"{baseUrl}/{line.Replace("unmuted.ts", "muted.ts")}")
-                .OrderBy(line => int.Parse(line.Split('/').Last().Replace(".ts", "").Split('-').First()));
+            var chunkedParts = M3U8Helper.ExtractLinks(m3U8, baseUrl)
+                .Where(part => part.Length > 1) /* Drop parts that consist of a single segment/chunk */
+                .ToArray();
 
             /* Create the download manager and start download */
             var manager = new ChunkedDownloadManager(
-                chunks,
+                chunkedParts,
                 Path.Combine(
                     FileSystemHelper.EnsurePathWithoutTrailingDelimiter(targetPath),
                     targetFilename));
@@ -127,13 +124,13 @@ namespace TwitchUnjail.Core {
             string reachableUrl = null;
             var increment = 0;
             while (increment <= 60) {
-                var timestamp = DateHelper.ToUnixTimestamp(ttInfo.RecordDate + TimeSpan.FromSeconds(increment));
+                var timestamp = (ttInfo.RecordDate + TimeSpan.FromSeconds(increment)).ToUnixTimestamp();
                 var baseUrl = GenerateVodBaseUrl(ttInfo.ChannelName, ttInfo.BroadcastId, timestamp);
                 var urlsToCheck = domains
                     .Select(domain => $"{domain}/{baseUrl}/chunked/index-dvr.m3u8")
                     .ToArray();
                 var tasks = urlsToCheck
-                    .Select(url => HttpHelper.IsUrlReachable(url))
+                    .Select(HttpHelper.IsUrlReachable)
                     .ToArray();
                 await Task.WhenAll(tasks);
                 for (var i = 0; i < tasks.Length; i++) {
