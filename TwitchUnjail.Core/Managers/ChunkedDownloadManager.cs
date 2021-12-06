@@ -14,16 +14,27 @@ using Timer = System.Timers.Timer;
 
 namespace TwitchUnjail.Core.Managers {
     
+    /**
+     * Downloader that takes an array of urls to download and a target filepath
+     * to concatenate the downloaded data into.
+     * Can use parallelism and a target bandwidth argument to control download speeds.
+     */
     public class ChunkedDownloadManager {
 
+        /* Only used if no thread count is given when the start method is called */
         private const int ThreadCount = 6;
+        /* Number of retries for a failed download chunk before throwing an exception */
         private const int RetryCount = 5;
+        /* Timeframe used to average download and write speeds over */
         private const int SpeedAveragingSeconds = 20;
         
+        /* Event that can be subscribed to for periodic progress updates */
         public delegate void DownloadProgressUpdateHandler(object sender, DownloadProgressUpdateEventArgs eventArgs);
         public event DownloadProgressUpdateHandler DownloadProgressUpdate;
         
+        /* The chunks to download */
         public ConcurrentQueue<Chunk> Chunks { get; }
+        /* Target filepath where downloaded bytes are written to */
         public string TargetFilePath { get; }
 
         private int _targetFiles;
@@ -65,7 +76,13 @@ namespace TwitchUnjail.Core.Managers {
             _bytesWrittenTracker = new ConcurrentDictionary<DateTime, long>();
         }
 
-        public async ValueTask Start(int? threadCount, int? targetKbps = null, DownloadProgressTracker progressTracker = null) {
+        /**
+         * Starts the download on the chunks.
+         * Allows specifying the thread count and target speed.
+         * Optionally a progress tracker can be injected that will be used to proxy
+         * periodic update information to a caller.
+         */
+        public async ValueTask Start(int? threadCount = null, int? targetKbps = null, DownloadProgressTracker progressTracker = null) {
             if (_running) {
                 throw new Exception("Download manager already running.");
             }
@@ -126,6 +143,9 @@ namespace TwitchUnjail.Core.Managers {
             }
         }
 
+        /**
+         * Starts the timer that is used to periodically distribute the byte allowance per thread.
+         */
         private void StartAllowanceTimer(int threadCount) {
             _allowanceTimer = new Timer();
             _allowanceTimer.Interval = 1000 / threadCount; /* To account for int-cutoff and timer delay we set the interval a little faster than 1sec */
@@ -134,6 +154,9 @@ namespace TwitchUnjail.Core.Managers {
             _allowanceTimer.Start();
         }
         
+        /**
+         * Adjusts the stored filename to include a number for multiple target files.
+         */
         private string GetPartedFilename(int fileIndex) {
             if (_targetFiles == 1) {
                 return TargetFilePath;
@@ -142,11 +165,18 @@ namespace TwitchUnjail.Core.Managers {
             return string.Join(".", parts.Take(parts.Length - 1)) + $".{fileIndex + 1}.{parts.Last()}";
         }
 
+        /**
+         * Main method for download worker threads.
+         * Gets called using an index that allows each thread to access
+         * their metered downloader sub-class.
+         */
         private async void DoWork(object threadIndex) {
             var downloader = _threads[(int)threadIndex].Item2;
 
             /* Process until chunks-queue is empty */
             while (_encounteredException == null && Chunks.TryDequeue(out var chunk)) {
+                
+                /* Loop until chunk is successfully done */
                 var retryCounter = 0;
                 while (!chunk.Done) {
                     try {
@@ -154,6 +184,7 @@ namespace TwitchUnjail.Core.Managers {
                         MarkFinished(chunk);
                     } catch (Exception ex) {
                         retryCounter++;
+                        /* Kill all download threads and exit out if too many failed attempts */
                         if (retryCounter > RetryCount) {
                             AbortThreads(ex);
                             return;
@@ -166,6 +197,15 @@ namespace TwitchUnjail.Core.Managers {
             }
         }
 
+        /**
+         * Marks a given chunk as finished.
+         * Is executed on any of the worker threads that finished downloading the chunk.
+         * Will push the chunk to the done-queue and then continue processing all entries
+         * on the done-queue if this is the chunk that is currently being waited for.
+         * Any other thread with a chunk that has a higher index than what is currently
+         * being waited for will just drop the chunk on the queue and go back to
+         * downloading.
+         */
         private void MarkFinished(Chunk chunk) {
             _doneQueue[chunk.Index] = chunk;
             chunk.Done = true;
@@ -202,6 +242,12 @@ namespace TwitchUnjail.Core.Managers {
             }
         }
 
+        /**
+         * Sets the exception private field that is checked by all worker threads
+         * and causes them to quit eventually.
+         * When all other threads have exited, will signal the main download method
+         * to resume.
+         */
         public void AbortThreads(Exception exception) {
             /* Set exception property and wait for all threads to exit */
             _encounteredException = exception;
@@ -213,6 +259,11 @@ namespace TwitchUnjail.Core.Managers {
             _finishedTask?.RunSynchronously();
         }
         
+        /**
+         * Called periodically by the progress timer.
+         * Will fire the progress update event and instruct the injected progress tracker
+         * to signal an update.
+         */
         private void OnProgressTimerElapsed(object sender, ElapsedEventArgs e) {
             var eventArgs = GenerateProgressUpdateEventArgs();
             DownloadProgressUpdate?.Invoke(this, eventArgs);
@@ -221,16 +272,28 @@ namespace TwitchUnjail.Core.Managers {
             }
         }
         
+        /**
+         * Called periodically by the allowance timer.
+         * Each time this method is called, it will grant allowance to the next thread,
+         * cycling all threads until stopped.
+         */
         private void OnAllowanceTimerElapsed(object sender, ElapsedEventArgs e) {
             var allowanceIndex = ++_lastAllowanceIndex % _threads.Length;
             _threads[allowanceIndex].Item2.Grant(_targetKbps * 1024 / _threads.Length);
             _lastAllowanceIndex = allowanceIndex;
         }
 
+        /**
+         * Called when a {MeteredHttpDownloader} class has read some bytes from the
+         * download stream so this class can track the download speed.
+         */
         private void OnThreadDownloadNotification(object sender, int bytesDownloaded) {
             _bytesDownloadedTracker[DateTime.Now] = bytesDownloaded;
         }
 
+        /**
+         * Generates download progress update event args containing many useful metrics.
+         */
         private DownloadProgressUpdateEventArgs GenerateProgressUpdateEventArgs() {
             var total = _lastIndex + 1;
             var written = _finishedIndex + 1;
@@ -272,9 +335,16 @@ namespace TwitchUnjail.Core.Managers {
         }
     }
 
+    /**
+     * Micro downloader class that uses a byte buffer and streams to to read downloads.
+     * Can be set to an byte allowance to limit the number of bytes read and therefore
+     * limiting the download speed.
+     */
     public class MeteredHttpDownloader {
 
+        /* Max size that can be read in one read-operation */
         private const int BufferSize = 64 * 1024;
+        /* Number of bytes that can be saved up, e.g. while the thread is rather writing the result file */
         private const int MaxSavedUpAllowance = 16 * 1024 * 1024;
         
         /* Events used to update subscribers of number of bytes downloaded */
@@ -303,6 +373,11 @@ namespace TwitchUnjail.Core.Managers {
             }
         }
 
+        /**
+         * Starts downloading the given url.
+         * If an allowance is set, the thread will be put to sleep for a short time
+         * if runs out of allowance.
+         */
         public async ValueTask<byte[]> Download(string url) {
             /* Send GET and await response with headers */
             var response = await _client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
@@ -364,6 +439,9 @@ namespace TwitchUnjail.Core.Managers {
         }
     }
 
+    /**
+     * Chunk model for the downloader.
+     */
     public class Chunk {
         public int FileIndex { get; set; }
         public int Index { get; set; }
@@ -372,6 +450,9 @@ namespace TwitchUnjail.Core.Managers {
         public bool Done { get; set; }
     }
 
+    /**
+     * Progress updates event model.
+     */
     public class DownloadProgressUpdateEventArgs {
         public string TargetFile { get; set; }
         public double SecondsElapsed { get; set; }

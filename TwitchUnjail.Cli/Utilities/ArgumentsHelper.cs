@@ -4,8 +4,14 @@ using TwitchUnjail.Core.Models.Enums;
 
 namespace TwitchUnjail.Cli.Utilities {
     
+    /**
+     * Useful helper methods around the process arguments.
+     */
     public static class ArgumentsHelper {
 
+        /**
+         * Gets the {FeedQuality} enum for a given enum text.
+         */
         public static FeedQuality QualityFromString(string input) {
             switch (input?.ToLower()) {
                 case "audioonly":
@@ -53,11 +59,18 @@ namespace TwitchUnjail.Cli.Utilities {
             }
         }
 
+        /**
+         * Gets a cleaned up enum text for a given {FeedQuality}.
+         */
         public static string QualityEnumToDisplayText(FeedQuality quality) {
             var text = quality.ToString();
             return text.StartsWith("Q") ? text[1..] : text;
         }
 
+        /**
+         * Searches a given args array for an argument key,
+         * casting the argument value by calling type.
+         */
         public static T SearchArgument<T>(string[] args, string key) {
             string type;
             if (typeof(T) == typeof(bool) || typeof(T) == typeof(bool?)) {
