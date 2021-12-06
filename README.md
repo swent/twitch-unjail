@@ -54,12 +54,12 @@ Settings that can be used in the app.
 
 # Run Examples
 
-`TwitchUnjail-1.0-rc2-win64.exe`
+`twitch-unjail-1.0-rc3-win64.exe`
 
-`TwitchUnjail-1.0-rc2-win64.exe --vod https://www.twitch.tv/videos/11111111`
+`twitch-unjail-1.0-rc3-win64.exe --vod https://www.twitch.tv/videos/11111111`
 
-`TwitchUnjail-1.0-rc2-win64.exe --vod https://www.twitch.tv/videos/11111111 --output C:\twitch`
+`twitch-unjail-1.0-rc3-win64.exe --vod https://www.twitch.tv/videos/11111111 --output C:\twitch`
 
-`TwitchUnjail-1.0-rc2-win64.exe --vod https://www.twitch.tv/videos/11111111 -q 720p -o C:\twitch`
+`twitch-unjail-1.0-rc3-win64.exe --vod https://www.twitch.tv/videos/11111111 -q 720p -o C:\twitch`
 
-`TwitchUnjail-1.0-rc2-win64.exe --vod https://www.twitch.tv/videos/11111111 -mbps 7.5 -o C:\twitch`
+`twitch-unjail-1.0-rc3-win64.exe --vod https://www.twitch.tv/videos/11111111 -mbps 7.5 -o C:\twitch`
