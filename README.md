@@ -5,9 +5,9 @@ Application can either be controlled via command line arguments or by entering d
 
 # Downloads
 
-- [v1.0-rc2 windows x64](https://github.com/swent/twitch-unjail/releases/download/v1.0-rc2/TwitchUnjail-1.0-rc2-win64.exe)
-- [v1.0-rc2 linux x64](https://github.com/swent/twitch-unjail/releases/download/v1.0-rc2/TwitchUnjail-1.0-rc2-linux64)
-- [v1.0-rc2 osx x64](https://github.com/swent/twitch-unjail/releases/download/v1.0-rc2/TwitchUnjail-1.0-rc2-osx64)
+- [v1.0-rc3 windows x64](https://github.com/swent/twitch-unjail/releases/download/v1.0-rc3/twitch-unjail-1.0-rc3-win64.exe)
+- [v1.0-rc3 linux x64](https://github.com/swent/twitch-unjail/releases/download/v1.0-rc3/twitch-unjail-1.0-rc3-linux64)
+- [v1.0-rc3 osx x64](https://github.com/swent/twitch-unjail/releases/download/v1.0-rc3/twitch-unjail-1.0-rc3-osx64)
 
 # Using command line arguments
 
