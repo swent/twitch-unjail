@@ -13,12 +13,12 @@ Application can either be controlled via command line arguments or by entering d
 
 Required arguments:
 - `-vod URL` the vod url to download
-- `--output PATH` or `-o PATH` the path to download to (excluding filename)
 
 Optional arguments:
 - `--quality QUALITY` or `-q QUALITY` the quality setting used for the download (see quality section below), will default to `source` quality if not used
 - `--name NAME` or `-n NAME` the download file name to use, will default to an auto-generated name if not used
 - `--mbps SPEED` the megabyte(s) per second download speed to aim for (careful: NOT megabit/s), will default to unlimited if not used
+- `--output PATH` or `-o PATH` the path to download to (excluding filename), will default to current dir if not used
 
 # Interactive mode
 
@@ -55,6 +55,8 @@ Settings that can be used in the app.
 # Run Examples
 
 `TwitchUnjail-1.0-rc2-win64.exe`
+
+`TwitchUnjail-1.0-rc2-win64.exe --vod https://www.twitch.tv/videos/11111111`
 
 `TwitchUnjail-1.0-rc2-win64.exe --vod https://www.twitch.tv/videos/11111111 --output C:\twitch`
 
