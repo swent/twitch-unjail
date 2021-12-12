@@ -36,30 +36,30 @@ Settings that can be used in the app.
 | Quality Setting | Short Form | Resolution | FPS   |
 |-----------------|------------|------------|-------|
 | AudioOnly       |            |            |       |
-| 144p30          | 144p       |            | 30    |
+| 144p30          | 144p       | 256x144    | 30    |
 | 160p30          | 160p       |            | 30    |
-| 360p30          | 360p       |            | 30    |
-| 360p60          |            |            | 60    |
-| 480p30          | 480p       |            | 30    |
-| 480p60          |            |            | 60    |
+| 360p30          | 360p       | 640×360    | 30    |
+| 360p60          |            | 640×360    | 60    |
+| 480p30          | 480p       | 854x480    | 30    |
+| 480p60          |            | 854x480    | 60    |
 | 720p30          | 720p       | 1280x720   | 30    |
 | 720p60          |            | 1280x720   | 60    |
 | 1080p30         | 1080p      | 1920x1080  | 30    |
 | 1080p60         |            | 1920x1080  | 60    |
 | 1440p30         | 1440p      | 2560x1440  | 30    |
 | 1440p60         |            | 2560x1440  | 60    |
-| 4K30            | 4K30       |            | 30    |
-| 4K60            |            |            | 60    |
-| Source          |            |            | 30/60 |
+| 4K30            | 4K30       | 3840x2160  | 30    |
+| 4K60            |            | 3840x2160  | 60    |
+| Source          |            | ?          | 30/60 |
 
 # Run Examples
 
-`TwitchUnjail-1.0-rc2-win64.exe`
+`twitch-unjail-1.0-rc3-win64.exe`
 
-`TwitchUnjail-1.0-rc2-win64.exe --vod https://www.twitch.tv/videos/11111111`
+`twitch-unjail-1.0-rc3-win64.exe --vod https://www.twitch.tv/videos/11111111`
 
-`TwitchUnjail-1.0-rc2-win64.exe --vod https://www.twitch.tv/videos/11111111 --output C:\twitch`
+`twitch-unjail-1.0-rc3-win64.exe --vod https://www.twitch.tv/videos/11111111 --output C:\twitch`
 
-`TwitchUnjail-1.0-rc2-win64.exe --vod https://www.twitch.tv/videos/11111111 -q 720p -o C:\twitch`
+`twitch-unjail-1.0-rc3-win64.exe --vod https://www.twitch.tv/videos/11111111 -q 720p -o C:\twitch`
 
-`TwitchUnjail-1.0-rc2-win64.exe --vod https://www.twitch.tv/videos/11111111 -mbps 7.5 -o C:\twitch`
+`twitch-unjail-1.0-rc3-win64.exe --vod https://www.twitch.tv/videos/11111111 -mbps 7.5 -o C:\twitch`
