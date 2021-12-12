@@ -3,21 +3,28 @@ Twitch vod downloader offering good speeds and low cpu utilization. Supports rec
 
 Application can either be controlled via command line arguments or by entering data interactivly.
 
+> Hint: CLI arguments have changed since RC3, please use the --url or --file argument !
+
 # Downloads
 
-- [v1.0-rc3 windows x64](https://github.com/swent/twitch-unjail/releases/download/v1.0-rc3/twitch-unjail-1.0-rc3-win64.exe)
-- [v1.0-rc3 linux x64](https://github.com/swent/twitch-unjail/releases/download/v1.0-rc3/twitch-unjail-1.0-rc3-linux64)
-- [v1.0-rc3 osx x64](https://github.com/swent/twitch-unjail/releases/download/v1.0-rc3/twitch-unjail-1.0-rc3-osx64)
+- [v1.0-rc4 windows x64](https://github.com/swent/twitch-unjail/releases/download/v1.0-rc4/twitch-unjail-1.0-rc4-win64.exe)
+- [v1.0-rc4 linux x64](https://github.com/swent/twitch-unjail/releases/download/v1.0-rc4/twitch-unjail-1.0-rc4-linux64)
+- [v1.0-rc4 osx x64](https://github.com/swent/twitch-unjail/releases/download/v1.0-rc4/twitch-unjail-1.0-rc4-osx64)
 
 # Using command line arguments
 
 Required arguments:
-- `-vod URL` the vod url to download
+- `--url URL` the vod url to download
+or
+- `--file PATH` path to a file containing multiple vod-urls to download
+or
+- `--help` or `-h` prints all available cli arguments in the console window
 
 Optional arguments:
 - `--quality QUALITY` or `-q QUALITY` the quality setting used for the download (see quality section below), will default to `source` quality if not used
 - `--name NAME` or `-n NAME` the download file name to use, will default to an auto-generated name if not used
 - `--mbps SPEED` the megabyte(s) per second download speed to aim for (careful: NOT megabit/s), will default to unlimited if not used
+- `--log` or `-l` enables very detailed process logging to a .log file in the download path, needed to report problems with the app
 - `--output PATH` or `-o PATH` the path to download to (excluding filename), will default to current dir if not used
 
 # Interactive mode
@@ -54,12 +61,14 @@ Settings that can be used in the app.
 
 # Run Examples
 
-`twitch-unjail-1.0-rc3-win64.exe`
+`twitch-unjail-1.0-rc4-win64.exe`
 
-`twitch-unjail-1.0-rc3-win64.exe --vod https://www.twitch.tv/videos/11111111`
+`twitch-unjail-1.0-rc4-win64.exe --url https://www.twitch.tv/videos/11111111`
 
-`twitch-unjail-1.0-rc3-win64.exe --vod https://www.twitch.tv/videos/11111111 --output C:\twitch`
+`twitch-unjail-1.0-rc4-win64.exe --url https://www.twitch.tv/videos/11111111 --output C:\twitch`
 
-`twitch-unjail-1.0-rc3-win64.exe --vod https://www.twitch.tv/videos/11111111 -q 720p -o C:\twitch`
+`twitch-unjail-1.0-rc4-win64.exe --url https://www.twitch.tv/videos/11111111 -q 720p -o C:\twitch`
 
-`twitch-unjail-1.0-rc3-win64.exe --vod https://www.twitch.tv/videos/11111111 -mbps 7.5 -o C:\twitch`
+`twitch-unjail-1.0-rc4-win64.exe --url https://www.twitch.tv/videos/11111111 -mbps 7.5 -o C:\twitch`
+
+`twitch-unjail-1.0-rc4-win64.exe --url https://www.twitch.tv/videos/11111111 --log`
