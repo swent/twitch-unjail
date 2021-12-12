@@ -3,6 +3,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using TwitchUnjail.Core.Models.HttpRequests;
 using TwitchUnjail.Core.Models.HttpResponses;
@@ -15,6 +16,8 @@ namespace TwitchUnjail.Core {
         private const string ApiUrl = "https://api.twitch.tv";
         private const string TokenUrl = "https://gql.twitch.tv/gql";
         private const string TwitchClientId = "kimne78kx3ncx6brgo4mv6wki5h1ko";
+
+        private static Regex TwitchVodRegex = new("twitch\\.tv\\/videos\\/([0-9]+)", RegexOptions.IgnoreCase);
 
         public static async ValueTask<VideoInfoResponse> GetVideoInfo(string url) {
             var videoId = GetVideoIdForUrl(url);
@@ -40,10 +43,13 @@ namespace TwitchUnjail.Core {
 
         public static long GetVideoIdForUrl(string url) {
             try {
-                return long.Parse(url.Split('/').Last());
-            } catch (Exception) {
-                throw new Exception($"Unable to find vod-id in url: {url ?? "NULL"}");
-            }
+                var matches = TwitchVodRegex.Match(url);
+                if (matches.Success && matches.Groups.Count == 2) {
+                    return long.Parse(matches.Groups[1].Value);
+                }
+            } catch { /* ignored */ }
+
+            throw new Exception($"Unable to find vod-id in url: {url ?? "NULL"}");
         }
     }
 }

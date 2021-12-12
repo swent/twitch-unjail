@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
@@ -13,8 +14,6 @@ namespace TwitchUnjail.Cli {
      * Main class for the console app.
      */
     internal static partial class Program {
-        
-        private const int ProgressBarSegments = 40;
 
         /**
          * Main entry point for the console / cli app.
@@ -22,14 +21,24 @@ namespace TwitchUnjail.Cli {
          */
         private static async Task<int> Main(string[] args) {
             try {
-                var vodUrl = ArgumentsHelper.SearchArgument<string>(args, "vod");
+                var url = ArgumentsHelper.SearchArgument<string>(args, "url");
+                var file = ArgumentsHelper.SearchArgument<string>(args, "file");
+                var helpArgument = ArgumentsHelper.SearchArgument<bool?>(args, "help")
+                    ?? ArgumentsHelper.SearchArgument<bool?>(args, "h");
 
                 /* Run interactive if no vod argument given */
-                if (string.IsNullOrEmpty(vodUrl)) {
+                if (helpArgument == true) {
+                    PrintCliHelp();
+                } else if (string.IsNullOrEmpty(url) && string.IsNullOrEmpty(file)) {
                     await RunInteractive();
                 }
                 else {
-                    await RunCli(vodUrl, args);
+                    /* Run cli mode based on given url */
+                    if (!string.IsNullOrEmpty(url)) {
+                        await RunVodDownloadCli(url, args);
+                    } else {
+                        await RunBatchDownloadCli(file, args);
+                    }
                 }
             } catch (Exception ex) {
                 /* Print error */
@@ -44,62 +53,8 @@ namespace TwitchUnjail.Cli {
             
             return 0;
         }
-        
-        /* Used to track one-time initialization of full progress text */
-        private static bool _progressInitialized;
-        /* Used to track number of progress bar segments in update screen */
-        private static int _lastSegmentsDone = -1;
 
-        /**
-         * Called when the {DownloadProgressTracker} sends an update to refresh
-         * download information on screen.
-         */
-        private static void OnDownloadProgressUpdate(DownloadProgressUpdateEventArgs eventArgs) {
-            var factorDone = eventArgs.ChunksWritten / (double)eventArgs.ChunksTotal;
-            var segmentsDone = (int)Math.Round(ProgressBarSegments * factorDone);
-            var segmentString = Enumerable.Range(0, segmentsDone).Aggregate("", (res, _) => res + "#");
-            var percentDone = (factorDone * 100).ToString("F1", CultureInfo.InvariantCulture);
-            
-            if (!_progressInitialized) {
-                /* Write full text if not initialized */
-                Console.Clear();
-                Console.WriteLine("Download to: ");
-                Console.WriteLine(string.Empty);
-                Console.WriteLine($"Downloaded     | {eventArgs.ChunksDownloaded} / {eventArgs.ChunksTotal}");
-                Console.WriteLine($"Written        | {eventArgs.ChunksWritten} / {eventArgs.ChunksTotal}");
-                Console.WriteLine($"Download speed | {(eventArgs.DownloadSpeedKBps / 1024.0).ToString("F2", CultureInfo.InvariantCulture)} mb/s");
-                Console.WriteLine($"Write speed    | {(eventArgs.WriteSpeedKBps / 1024.0).ToString("F2", CultureInfo.InvariantCulture)} mb/s");
-                Console.WriteLine(string.Empty);
-                Console.WriteLine($"[{segmentString.PadRight(ProgressBarSegments)}] {percentDone.PadLeft(5)}%");
-                Console.WriteLine(string.Empty);
-                Console.SetCursorPosition(13, 0);
-                Console.WriteLine(eventArgs.TargetFile);
-                _progressInitialized = true;
-            } else {
-                /* Only update partially */
-                Console.SetCursorPosition(17, 2);
-                Console.Write($"{eventArgs.ChunksDownloaded} / {eventArgs.ChunksTotal}");
-                Console.SetCursorPosition(17, 3);
-                Console.Write($"{eventArgs.ChunksWritten} / {eventArgs.ChunksTotal}");
-                Console.SetCursorPosition(17, 4);
-                Console.Write($"{(eventArgs.DownloadSpeedKBps / 1024.0).ToString("F2", CultureInfo.InvariantCulture)} mb/s");
-                Console.SetCursorPosition(17, 5);
-                Console.Write($"{(eventArgs.WriteSpeedKBps / 1024.0).ToString("F2", CultureInfo.InvariantCulture)} mb/s");
-                Console.SetCursorPosition(3 + ProgressBarSegments, 7);
-                Console.Write($"{percentDone.PadLeft(5)}%");
-            }
 
-            /* Update progress bar if number of segments changed */
-            if (_lastSegmentsDone != segmentsDone) {
-                Console.SetCursorPosition(0, 7);
-                Console.Write($"[{segmentString.PadRight(ProgressBarSegments)}]");
-                _lastSegmentsDone = segmentsDone;
-            }
-            
-            /* Set cursor to bottom */
-            Console.SetCursorPosition(0, 8);
-        }
-        
         /**
          * Helper method to generate a vod filename based on vod information.
          */

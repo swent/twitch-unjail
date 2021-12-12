@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using TwitchUnjail.Core.Managers;
 using TwitchUnjail.Core.Models;
@@ -96,36 +97,56 @@ namespace TwitchUnjail.Core {
                 feeds);
         }
 
-        public static async ValueTask DownloadVod(string feedUrl, FeedQuality quality, string targetPath, string targetFilename, int? targetKbps, DownloadProgressTracker progressTracker = null) {
+        public static async ValueTask DownloadMp4(string feedUrl, FeedQuality quality, string targetFilePath, int? targetKbps, DownloadManagerProxy downloadProxy = null, FileLogManager logManager = null) {
+            /* Pick url and load the m3u8 file */
+            var baseUrl = string.Join("/", feedUrl
+                .Split('/')
+                .SkipLast(1));
+            var m3U8 = await HttpHelper.GetHttp(feedUrl);
+            
+            logManager.LogIfAvailable($"[VOD] Quality setting: {quality}");
+            logManager.LogIfAvailable($"[VOD] Base url from feed: {baseUrl}");
+            logManager.LogIfAvailable($"[VOD] M3U8 file length: {m3U8.Length}");
+
+            /* Map m3u8 entries to absolute download url for each chunk */
+            var chunkedParts = M3U8Helper.ExtractLinks(m3U8, baseUrl)
+                .Where(part => part.Length > 1) /* Drop parts that consist of a single segment/chunk */
+                .ToArray();
+            
+            logManager.LogIfAvailable($"[VOD] Chunks extracted from M3U8: {string.Join(", ", chunkedParts.Select(part => part.Length))}");
+
+            /* Create the download manager and start download */
+            var manager = new ChunkedDownloadManager(
+                chunkedParts,
+                targetFilePath,
+                logManager);
+            await manager.Start(PickDownloaderThreadCountByQualityAndTargetSpeed(quality, targetKbps), targetKbps, downloadProxy);
+        }
+
+        public static async ValueTask DownloadM3U8(string feedUrl, string targetFilePath) {
             /* Pick url and load the m3u8 file */
             var baseUrl = string.Join("/", feedUrl
                 .Split('/')
                 .SkipLast(1));
             var m3U8 = await HttpHelper.GetHttp(feedUrl);
 
-            /* Map m3u8 entries to absolute download url for each chunk */
-            var chunkedParts = M3U8Helper.ExtractLinks(m3U8, baseUrl)
-                .Where(part => part.Length > 1) /* Drop parts that consist of a single segment/chunk */
-                .ToArray();
+            /* Map m3u8 entries to absolute download url */
+            m3U8 = M3U8Helper.MapToBaseUrl(m3U8, baseUrl);
 
-            /* Create the download manager and start download */
-            var manager = new ChunkedDownloadManager(
-                chunkedParts,
-                Path.Combine(
-                    FileSystemHelper.EnsurePathWithoutTrailingDelimiter(targetPath),
-                    targetFilename));
-            await manager.Start(PickDownloaderThreadCountByQualityAndTargetSpeed(quality, targetKbps), targetKbps, progressTracker);
+            /* Save file */
+            Directory.CreateDirectory(Path.GetDirectoryName(targetFilePath)!);
+            File.WriteAllText(targetFilePath, m3U8, Encoding.UTF8);
         }
 
-        public static async ValueTask<Dictionary<FeedQuality, string>> RecoverVodFeeds(VodRecoveryInfo ttInfo) {
+        public static async ValueTask<Dictionary<FeedQuality, string>> RecoverVodFeeds(VodRecoveryInfo recoveryInfo) {
             var domains = await HttpHelper.GetTwitchDomains();
 
             /* Brute-force +-60 seconds around given record time to find valid vod url */
             string reachableUrl = null;
             var increment = 0;
             while (increment <= 60) {
-                var timestamp = (ttInfo.RecordDate + TimeSpan.FromSeconds(increment)).ToUnixTimestamp();
-                var baseUrl = GenerateVodBaseUrl(ttInfo.ChannelName, ttInfo.BroadcastId, timestamp);
+                var timestamp = (recoveryInfo.RecordDate + TimeSpan.FromSeconds(increment)).ToUnixTimestamp();
+                var baseUrl = GenerateVodBaseUrl(recoveryInfo.ChannelName, recoveryInfo.BroadcastId, timestamp);
                 var urlsToCheck = domains
                     .Select(domain => $"{domain}/{baseUrl}/chunked/index-dvr.m3u8")
                     .ToArray();
@@ -214,22 +235,22 @@ namespace TwitchUnjail.Core {
                 case FeedQuality.Q4Kp30:
                 case FeedQuality.Q1440p60:
                 case FeedQuality.Q1440p30:
-                    return (int)(6 * speedMult);
+                    return (int)(4 * speedMult);
                 case FeedQuality.Q1080p60:
                 case FeedQuality.Q1080p30:
                 case FeedQuality.Source:
-                    return (int)(8 * speedMult);
+                    return (int)(6 * speedMult);
                 case FeedQuality.Q720p60:
                 case FeedQuality.Q720p30:
-                    return (int)(10 * speedMult);
+                    return (int)(8 * speedMult);
                 case FeedQuality.Q480p60:
                 case FeedQuality.Q480p30:
-                    return (int)(12 * speedMult);
+                    return (int)(10 * speedMult);
                 case FeedQuality.Q360p60:
                 case FeedQuality.Q360p30:
-                    return (int)(14 * speedMult);
+                    return (int)(12 * speedMult);
                 default:
-                    return (int)(20 * speedMult);
+                    return (int)(16 * speedMult);
             }
         }
     }
