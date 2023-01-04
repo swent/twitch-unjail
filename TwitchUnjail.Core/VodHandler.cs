@@ -233,9 +233,10 @@ namespace TwitchUnjail.Core {
             switch (quality) {
                 case FeedQuality.Q4Kp60:
                 case FeedQuality.Q4Kp30:
+                    return (int)(4 * speedMult);
                 case FeedQuality.Q1440p60:
                 case FeedQuality.Q1440p30:
-                    return (int)(4 * speedMult);
+                    return (int)(5 * speedMult);
                 case FeedQuality.Q1080p60:
                 case FeedQuality.Q1080p30:
                 case FeedQuality.Source:

@@ -11,14 +11,11 @@ namespace TwitchUnjail.Cli {
         private const int ProgressBarSegments = 40;
         private const int TimeAveragingSegments = 60;
         
-        // /* Used to track number of progress bar segments in update screen */
-        // private static int _lastSegmentsDone = -1;
         /* Factor done averaging queue */
         private static Queue<double> _factorDoneValues = new();
         /* Time remaining averaging queue */
         private static Queue<double> _timeRemainingValues = new();
-        
-        
+
         /**
          * Resets all progress view metrics and triggers a clean draw of the progress view.
          */
@@ -32,7 +29,7 @@ namespace TwitchUnjail.Cli {
             }
 
             Console.Clear();
-            PrintProgressUpdateView(targetFilename, 0, 0, 0, 0.0, 0.0, 0.0, "-", false, null);
+            PrintProgressUpdateView(targetFilename, 0, 0, 0, 0.0, 0.0, 0.0, "-", false, null, null, false);
         }
 
         /**
@@ -66,10 +63,13 @@ namespace TwitchUnjail.Cli {
                 etaString = "ETA: " + timeRemaining.ToString(timeRemaining .TotalMinutes > 59 ? "hh\\:mm\\:ss" : "mm\\:ss").PadRight(8);
             }
 
-            PrintProgressUpdateView(eventArgs.TargetFile, eventArgs.ChunksDownloaded, eventArgs.ChunksWritten, eventArgs.ChunksTotal, eventArgs.DownloadSpeedKBps, eventArgs.WriteSpeedKBps, factorDone, etaString, eventArgs.IsPaused, eventArgs.TargetSpeedLimitKbPerSecond);
+            PrintProgressUpdateView(eventArgs.TargetFile, eventArgs.ChunksDownloaded, eventArgs.ChunksWritten, eventArgs.ChunksTotal, eventArgs.DownloadSpeedKBps, eventArgs.WriteSpeedKBps, factorDone, etaString, eventArgs.IsPaused, eventArgs.TargetSpeedLimitKbPerSecond, eventArgs.TargetSpeedPercent, eventArgs.IsMeasuringSpeed);
         }
 
-        private static void PrintProgressUpdateView(string targetFilename, int downloaded, int written, int total, double downloadSpeedKBps, double writeSpeedKBps, double factorDone, string eta, bool isPaused, int? limitKbPerSecond) {
+        /**
+         * 
+         */
+        private static void PrintProgressUpdateView(string targetFilename, int downloaded, int written, int total, double downloadSpeedKBps, double writeSpeedKBps, double factorDone, string eta, bool isPaused, int? limitKbPerSecond, int? limitPercent, bool isInMeasureSpeedMode) {
             var consoleWidth = Console.WindowWidth;
             var percentDone = (factorDone * 100).ToString("F1", CultureInfo.InvariantCulture);
             var segmentsDone = (int)Math.Round(ProgressBarSegments * factorDone);
@@ -84,7 +84,13 @@ namespace TwitchUnjail.Cli {
             Console.SetCursorPosition(0, 3);
             Console.Write($"Written        | {written} / {total}".PadRight(consoleWidth));
             Console.SetCursorPosition(0, 4);
-            Console.Write($"Download speed | {(downloadSpeedKBps / 1024.0).ToString("F2", CultureInfo.InvariantCulture)} mb/s {(limitKbPerSecond == null ? "" : $"(limited to {((int)limitKbPerSecond / 1024.0).ToString("F2", CultureInfo.InvariantCulture)} mb/s)")}".PadRight(consoleWidth));
+            var additionalDownloadSpeedinfo = string.Empty;
+            if (limitPercent != null) {
+                additionalDownloadSpeedinfo = $"(limited to {limitPercent}%, {((int)limitKbPerSecond / 1024.0).ToString("F2", CultureInfo.InvariantCulture)} mb/s)";
+            } else if (limitKbPerSecond != null) {
+                additionalDownloadSpeedinfo = $"(limited to {((int)limitKbPerSecond / 1024.0).ToString("F2", CultureInfo.InvariantCulture)} mb/s)";
+            }
+            Console.Write($"Download speed | {(downloadSpeedKBps / 1024.0).ToString("F2", CultureInfo.InvariantCulture)} mb/s {additionalDownloadSpeedinfo}".PadRight(consoleWidth));
             Console.SetCursorPosition(0, 5);
             Console.Write($"Write speed    | {(writeSpeedKBps / 1024.0).ToString("F2", CultureInfo.InvariantCulture)} mb/s".PadRight(consoleWidth));
             Console.SetCursorPosition(0, 6);
@@ -104,7 +110,7 @@ namespace TwitchUnjail.Cli {
                 Console.SetCursorPosition(0, 9);
                 Console.Write(string.Empty.PadRight(consoleWidth));
                 Console.SetCursorPosition(0, 10);
-                Console.Write(" [ P ] pause        [ F ] fixed speed limit".PadRight(consoleWidth));
+                Console.Write(" [ P ] pause        [ F ] fixed speed limit  [ V ] variable speed limit".PadRight(consoleWidth));
                 Console.SetCursorPosition(0, 11);
                 Console.Write(" [ + ] speed limit  [ - ] speed limit".PadRight(consoleWidth));
                 Console.SetCursorPosition(0, 12);

@@ -7,9 +7,9 @@ Application can either be controlled via command line arguments or by entering d
 
 # Downloads
 
-- [v1.0-rc4 windows x64](https://github.com/swent/twitch-unjail/releases/download/v1.0-rc4/twitch-unjail-1.0-rc4-win64.exe)
-- [v1.0-rc4 linux x64](https://github.com/swent/twitch-unjail/releases/download/v1.0-rc4/twitch-unjail-1.0-rc4-linux64)
-- [v1.0-rc4 osx x64](https://github.com/swent/twitch-unjail/releases/download/v1.0-rc4/twitch-unjail-1.0-rc4-osx64)
+- [v1.0-rc6 windows x64](https://github.com/swent/twitch-unjail/releases/download/v1.0-rc6/twitch-unjail-1.0-rc6-win64.exe)
+- [v1.0-rc6 linux x64](https://github.com/swent/twitch-unjail/releases/download/v1.0-rc6/twitch-unjail-1.0-rc6-linux64)
+- [v1.0-rc6 osx x64](https://github.com/swent/twitch-unjail/releases/download/v1.0-rc6/twitch-unjail-1.0-rc6-osx64)
 
 # Using command line arguments
 
@@ -61,14 +61,14 @@ Settings that can be used in the app.
 
 # Run Examples
 
-`twitch-unjail-1.0-rc4-win64.exe`
+`twitch-unjail-1.0-rc6-win64.exe`
 
-`twitch-unjail-1.0-rc4-win64.exe --url https://www.twitch.tv/videos/11111111`
+`twitch-unjail-1.0-rc6-win64.exe --url https://www.twitch.tv/videos/11111111`
 
-`twitch-unjail-1.0-rc4-win64.exe --url https://www.twitch.tv/videos/11111111 --output C:\twitch`
+`twitch-unjail-1.0-rc6-win64.exe --url https://www.twitch.tv/videos/11111111 --output C:\twitch`
 
-`twitch-unjail-1.0-rc4-win64.exe --url https://www.twitch.tv/videos/11111111 -q 720p -o C:\twitch`
+`twitch-unjail-1.0-rc6-win64.exe --url https://www.twitch.tv/videos/11111111 -q 720p -o C:\twitch`
 
-`twitch-unjail-1.0-rc4-win64.exe --url https://www.twitch.tv/videos/11111111 -mbps 7.5 -o C:\twitch`
+`twitch-unjail-1.0-rc6-win64.exe --url https://www.twitch.tv/videos/11111111 -mbps 7.5 -o C:\twitch`
 
-`twitch-unjail-1.0-rc4-win64.exe --url https://www.twitch.tv/videos/11111111 --log`
+`twitch-unjail-1.0-rc6-win64.exe --url https://www.twitch.tv/videos/11111111 --log`

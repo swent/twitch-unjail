@@ -53,7 +53,7 @@ namespace TwitchUnjail.Core.Models {
                             DownloaderCommand?.Invoke(this, Managers.DownloaderCommand.ToggleFixedSpeedLimit);
                             break;
                         case ConsoleKey.V:
-                            // DownloaderCommand?.Invoke(this, Managers.DownloaderCommand.ToggleVariableSpeedLimit);
+                            DownloaderCommand?.Invoke(this, Managers.DownloaderCommand.ToggleVariableSpeedLimit);
                             break;
                         case ConsoleKey.OemPlus:
                             DownloaderCommand?.Invoke(this, Managers.DownloaderCommand.IncreaseSpeedLimit);

@@ -36,6 +36,18 @@ namespace TwitchUnjail.Core.Managers {
         public const int MaximumKbPerSecondSpeedLimit = 60 * 1024;
         /* Minimum speed limit allowed */
         public const int MinimumKbPerSecondSpeedLimit = 512;
+        /* Default speed limit when activated on-the-fly */
+        public const int DefaultPercentSpeedLimit = 50;
+        /* Maximum percent speed limit allowed */
+        public const int MaximumPercentSpeedLimit = 75;
+        /* Minimum percent speed limit allowed */
+        public const int MinimumPercentSpeedLimit = 20;
+        /* Interval in which variable speed limit is renewed by measuring speeds */
+        public const int BandwidthMeasurementIntervalSeconds = 30;
+        /* Timeframe taken to measure download speeds */
+        public const int BandwidthMeasurementTimeframeSeconds = 1;
+        /* Number of chunks for average chunk time calculation */
+        public const int ChunksForChunkSizeCalculation = 50;
         
         /* Event that can be subscribed to for periodic progress updates */
         public delegate void DownloadProgressUpdateHandler(object sender, DownloadProgressUpdateEventArgs eventArgs);
@@ -59,12 +71,17 @@ namespace TwitchUnjail.Core.Managers {
         private BinaryWriter[] _writer;
         private Timer _progressTimer;
         private Timer _allowanceTimer;
+        private Timer _bandwidthMeasurementTimer;
+        private DownloaderSpeedLimit _activeSpeedLimit;
         private int _targetSpeedKbPerSecond;
+        private int _targetSpeedPercent;
+        private bool _bandwidthMeasurementActive;
+        private int _bandwidthMeasurementBytes;
         private int _lastAllowanceIndex;
         private bool _isPaused;
-        private bool _isSpeedLimited;
         private ConcurrentDictionary<DateTime, long> _bytesDownloadedTracker;
         private ConcurrentDictionary<DateTime, long> _bytesWrittenTracker;
+        private ConcurrentQueue<long> _sizePerChunkQueue;
         private (Thread, MeteredHttpDownloader)[] _threads;
         private FileLogManager _logManager;
 
@@ -86,6 +103,7 @@ namespace TwitchUnjail.Core.Managers {
             _progressTimer.Elapsed += OnProgressTimerElapsed;
             _bytesDownloadedTracker = new ConcurrentDictionary<DateTime, long>();
             _bytesWrittenTracker = new ConcurrentDictionary<DateTime, long>();
+            _sizePerChunkQueue = new ConcurrentQueue<long>();
             _logManager = logManager;
             _logManager.LogIfAvailable($"[CDM] Initialized {Chunks.Count} chunks over {fileCounter} files");
         }
@@ -115,6 +133,8 @@ namespace TwitchUnjail.Core.Managers {
             _lastIndex = Chunks.Count - 1;
             _doneQueue = new ConcurrentDictionary<int, Chunk>();
             _isPaused = false;
+            _activeSpeedLimit = DownloaderSpeedLimit.None;
+            _bandwidthMeasurementActive = false;
             Directory.CreateDirectory(Path.GetDirectoryName(TargetFilePath)!);
             _stream = new FileStream[_targetFiles];
             _writer = new BinaryWriter[_targetFiles];
@@ -184,6 +204,22 @@ namespace TwitchUnjail.Core.Managers {
         }
         
         /**
+         * Starts the timer that is used to periodically measure the available bandwidth.
+         */
+        private void StartBandwidthMeasurementTimer() {
+            if (_bandwidthMeasurementTimer == null) {
+                _bandwidthMeasurementTimer = new Timer();
+                _bandwidthMeasurementTimer.Interval = BandwidthMeasurementIntervalSeconds * 1000.0;
+                _bandwidthMeasurementTimer.AutoReset = false;
+                _bandwidthMeasurementTimer.Elapsed += OnBandwidthMeasurementTimerElapsed;
+            }
+            if (!_bandwidthMeasurementTimer.Enabled) {
+                _logManager.LogIfAvailable($"[CDM] BandwidthMeasurementTimer started !");
+                _bandwidthMeasurementTimer.Start();
+            }
+        }
+        
+        /**
          * Adjusts the stored filename to include a number for multiple target files.
          */
         private string GetPartedFilename(int fileIndex) {
@@ -199,26 +235,31 @@ namespace TwitchUnjail.Core.Managers {
          * Gets called using an index that allows each thread to access
          * their metered downloader sub-class.
          */
-        private async void DoWork(object threadIndex) {
-            _logManager.LogIfAvailable($"[CDM] Thread {(int)threadIndex} starting up ...");
-            var downloader = _threads[(int)threadIndex].Item2;
+        private async void DoWork(object idx) {
+            int threadIndex = (int)idx;
+            _logManager.LogIfAvailable($"[CDM] Thread {threadIndex} starting up ...");
+            var downloader = _threads[threadIndex].Item2;
+            var stopWatch = new Stopwatch();
 
             /* Process until chunks-queue is empty */
             while (_encounteredException == null && Chunks.TryDequeue(out var chunk)) {
-                
+
                 /* Loop until chunk is successfully done */
-                _logManager.LogIfAvailable($"[CDM] Thread {(int)threadIndex} picked chunk {chunk.Index} from queue");
+                _logManager.LogIfAvailable($"[CDM] Thread {threadIndex} picked chunk {chunk.Index} from queue");
                 var retryCounter = 0;
                 while (!chunk.Done) {
                     try {
-                        _logManager.LogIfAvailable($"[CDM] Thread {(int)threadIndex} starting attempt {retryCounter + 1} to download chunk {chunk.Index} ...");
+                        stopWatch.Restart();
+                        _logManager.LogIfAvailable($"[CDM] Thread {threadIndex} starting attempt {retryCounter + 1} to download chunk {chunk.Index} ...");
                         chunk.Content = await downloader.Download(chunk.Url);
-                        _logManager.LogIfAvailable($"[CDM] Thread {(int)threadIndex} finished downloading chunk {chunk.Index} !");
+                        _logManager.LogIfAvailable($"[CDM] Thread {threadIndex} finished downloading chunk {chunk.Index} !");
+                        stopWatch.Stop();
+                        _sizePerChunkQueue.Enqueue(chunk.Content.Length);
                         MarkFinished(chunk);
                     } catch (Exception ex) {
                         retryCounter++;
                         /* Kill all download threads and exit out if too many failed attempts */
-                        _logManager.LogIfAvailable($"[CDM] Thread {(int)threadIndex} encountered an exception when downloading chunk {chunk.Index}: {ex.Message} {ex.StackTrace}");
+                        _logManager.LogIfAvailable($"[CDM] Thread {threadIndex} encountered an exception when downloading chunk {chunk.Index}: {ex.Message} {ex.StackTrace}");
                         if (retryCounter > RetryCount) {
                             if (ex is HttpRequestException && ex.Message.Contains("403 (Forbidden)")) {
                                 AbortThreads(
@@ -347,13 +388,33 @@ namespace TwitchUnjail.Core.Managers {
          */
         public void EnableFixedSpeedLimit(int targetKbPerSecond) {
             _logManager.LogIfAvailable($"[CDM] Enabling fixed speed limit ...");
-            _isSpeedLimited = true;
+            _activeSpeedLimit = DownloaderSpeedLimit.Fixed;
             foreach (var thread in _threads) {
-                thread.Item2.SetByteAllowance(targetKbPerSecond / _threads.Length * 1024 / 4);
+                thread.Item2.SetByteAllowance(targetKbPerSecond / _threads.Length * 1024 / 8);
             }
             StartAllowanceTimer();
+            _bandwidthMeasurementTimer?.Stop();
             _targetSpeedKbPerSecond = targetKbPerSecond;
             _lastAllowanceIndex = -1;
+            _bandwidthMeasurementActive = false;
+        }
+        
+        /**
+         * Sets a variable speed limit for the download.
+         */
+        public void EnableVariableSpeedLimit(int targetPercent) {
+            _logManager.LogIfAvailable($"[CDM] Enabling variable speed limit ...");
+            _activeSpeedLimit = DownloaderSpeedLimit.Variable;
+            var currentDownloadSpeedKbPerSecond = (int)(CalculateRecentSpeeds()[0] * (targetPercent / 100.0));
+            foreach (var thread in _threads) {
+                thread.Item2.SetByteAllowance(currentDownloadSpeedKbPerSecond / _threads.Length * 1024 / 8);
+            }
+            StartAllowanceTimer();
+            StartBandwidthMeasurementTimer();
+            _targetSpeedKbPerSecond = currentDownloadSpeedKbPerSecond;
+            _targetSpeedPercent = targetPercent;
+            _lastAllowanceIndex = -1;
+            _bandwidthMeasurementActive = false;
         }
         
         /**
@@ -361,12 +422,14 @@ namespace TwitchUnjail.Core.Managers {
          */
         public void DisableSpeedLimit() {
             _logManager.LogIfAvailable($"[CDM] Disabling speed limit ...");
-            _isSpeedLimited = false;
+            _activeSpeedLimit = DownloaderSpeedLimit.None;
             foreach (var thread in _threads) {
                 thread.Item2.SetByteAllowance(null);
             }
             _allowanceTimer.Stop();
+            _bandwidthMeasurementTimer?.Stop();
             _targetSpeedKbPerSecond = -1;
+            _bandwidthMeasurementActive = false;
         }
         
         /**
@@ -389,18 +452,68 @@ namespace TwitchUnjail.Core.Managers {
          */
         private void OnAllowanceTimerElapsed(object sender, ElapsedEventArgs e) {
             var allowanceIndex = ++_lastAllowanceIndex % _threads.Length;
-            var bytesGranted = _targetSpeedKbPerSecond * 1024 / _threads.Length;
+            var bytesGranted = (int)(_targetSpeedKbPerSecond * 1024.0 / _threads.Length *
+                                     (_activeSpeedLimit == DownloaderSpeedLimit.Fixed
+                                         ? 1.0
+                                         : 1.0 - (double)BandwidthMeasurementTimeframeSeconds /
+                                         BandwidthMeasurementIntervalSeconds / 2));
             _logManager.LogIfAvailable($"[CDM] Granting {bytesGranted} bytes of allowance to thread {allowanceIndex} ...");
             _threads[allowanceIndex].Item2.Grant(bytesGranted);
             _lastAllowanceIndex = allowanceIndex;
+        }
+        
+        /**
+         * Called periodically by the bandwidth measurement timer.
+         * Will initiate bandwidth measurement and afterwards set all threads to a new dynamic
+         * download speed based on the measurement results.
+         */
+        private void OnBandwidthMeasurementTimerElapsed(object sender, ElapsedEventArgs e) {
+            if (!_bandwidthMeasurementActive) {
+                /* Start measuring throughput */
+                _bandwidthMeasurementBytes = 0;
+                _bandwidthMeasurementActive = true;
+                /* Temporarily stop allowance and unlimit all threads */
+                _allowanceTimer.Stop();
+                for (var i = 0; i < _threads.Length; i++) {
+                    _threads[i].Item2.SetByteAllowance(null);
+                }
+                /* Schedule a new timer tick to calculate the results of this test */
+                _bandwidthMeasurementTimer.Interval = BandwidthMeasurementTimeframeSeconds * 1000.0;
+                _bandwidthMeasurementTimer.Start();
+            } else {
+                /* Stop measuring */
+                _bandwidthMeasurementActive = false;
+                var bytesPerSecond = _bandwidthMeasurementBytes / BandwidthMeasurementTimeframeSeconds;
+                /* Use a dirty simple metric to decrease the measurement if many threads are used since
+                 they each already downloaded a part that will be reported to the measurement before measuring
+                 even began. Also use the chunk size to counter-weight the error-adjust. Hopefully this can be
+                 replaced by some proper metric at some point. */
+                var chunkSizeAdjustmentFactor = Math.Min(0.5 + Math.Min(GetAverageChunkSize() / 1024 / 1024, 5.3) * 0.0943, 1.0);
+                var errorAdjustmentFactor = Math.Max((1.06 + 0.021 * _threads.Length) * Math.Pow(1.021, _threads.Length) * chunkSizeAdjustmentFactor /*+ (100.0 / _targetSpeedPercent - 1.33) * 0.03*/, 1.0);
+                /* Apply new speed limit */
+                _targetSpeedKbPerSecond = (int)(bytesPerSecond / 1024.0 * (_targetSpeedPercent / 100.0) / errorAdjustmentFactor);
+                var allowancePerThread = (int)(_targetSpeedKbPerSecond * 1024.0 / _threads.Length / 16);
+                /* Set all threads to limited allowance again */
+                for (var i = 0; i < _threads.Length; i++) {
+                    _threads[i].Item2.SetByteAllowance(allowancePerThread);
+                }
+                StartAllowanceTimer();
+                /* Plan next measurement */
+                _bandwidthMeasurementTimer.Interval = BandwidthMeasurementIntervalSeconds * 1000.0;
+                _bandwidthMeasurementTimer.Start();
+            }
         }
 
         /**
          * Called when a {MeteredHttpDownloader} class has read some bytes from the
          * download stream so this class can track the download speed.
          */
-        private void OnThreadDownloadNotification(object sender, int bytesDownloaded) {
+        private void OnThreadDownloadNotification(object sender, int threadIndex, int bytesDownloaded) {
             _bytesDownloadedTracker[DateTime.Now] = bytesDownloaded;
+
+            if (_bandwidthMeasurementActive) {
+                _bandwidthMeasurementBytes += bytesDownloaded;
+            }
         }
         
         /**
@@ -417,27 +530,41 @@ namespace TwitchUnjail.Core.Managers {
                     return;
                 
                 case DownloaderCommand.ToggleFixedSpeedLimit:
-                    if (_isSpeedLimited) {
+                    if (_activeSpeedLimit == DownloaderSpeedLimit.Fixed) {
                         DisableSpeedLimit();
                     } else {
                         EnableFixedSpeedLimit(DefaultKbPerSecondSpeedLimit);
                     }
                     return;
                 
+                case DownloaderCommand.ToggleVariableSpeedLimit:
+                    if (_activeSpeedLimit == DownloaderSpeedLimit.Variable) {
+                        DisableSpeedLimit();
+                    } else {
+                        EnableVariableSpeedLimit(DefaultPercentSpeedLimit);
+                    }
+                    return;
+                
                 case DownloaderCommand.IncreaseSpeedLimit:
-                    if (_isSpeedLimited) {
-                        _logManager.LogIfAvailable($"[CDM] Increasing speed limit ...");
+                    if (_activeSpeedLimit == DownloaderSpeedLimit.Fixed) {
+                        _logManager.LogIfAvailable($"[CDM] Increasing fixed speed limit ...");
                         _targetSpeedKbPerSecond = (int)(_targetSpeedKbPerSecond * 1.12);
                         if (_targetSpeedKbPerSecond > MaximumKbPerSecondSpeedLimit) {
                             DisableSpeedLimit();
                         }
+                    } else if (_activeSpeedLimit == DownloaderSpeedLimit.Variable) {
+                        _logManager.LogIfAvailable($"[CDM] Increasing variable speed limit ...");
+                        _targetSpeedPercent = Math.Min(_targetSpeedPercent + 5, MaximumPercentSpeedLimit);
                     }
                     return;
                 
                 case DownloaderCommand.DecreaseSpeedLimit:
-                    if (_isSpeedLimited) {
+                    if (_activeSpeedLimit == DownloaderSpeedLimit.Fixed) {
                         _logManager.LogIfAvailable($"[CDM] Decreasing speed limit ...");
                         _targetSpeedKbPerSecond = Math.Max((int)(_targetSpeedKbPerSecond / 1.12), MinimumKbPerSecondSpeedLimit);
+                    } else if (_activeSpeedLimit == DownloaderSpeedLimit.Variable) {
+                        _logManager.LogIfAvailable($"[CDM] Decreasing variable speed limit ...");
+                        _targetSpeedPercent = Math.Max(_targetSpeedPercent - 5, MinimumPercentSpeedLimit);
                     }
                     return;
             }
@@ -451,6 +578,24 @@ namespace TwitchUnjail.Core.Managers {
             var written = _finishedIndex + 1;
             var downloaded = written + _doneQueue.Count;
 
+            var speeds = CalculateRecentSpeeds();
+            var secondsElapsed = (DateTime.Now - _startTime).TotalSeconds;
+            return new DownloadProgressUpdateEventArgs {
+                TargetFile = TargetFilePath,
+                SecondsElapsed = secondsElapsed,
+                ChunksTotal = total,
+                ChunksDownloaded = downloaded,
+                ChunksWritten = written,
+                DownloadSpeedKBps = speeds[0],
+                WriteSpeedKBps = speeds[1],
+                IsPaused = _isPaused,
+                TargetSpeedLimitKbPerSecond = _activeSpeedLimit != DownloaderSpeedLimit.None ? _targetSpeedKbPerSecond : null,
+                TargetSpeedPercent = _activeSpeedLimit == DownloaderSpeedLimit.Variable ? _targetSpeedPercent : null,
+                IsMeasuringSpeed = _activeSpeedLimit == DownloaderSpeedLimit.Variable && _bandwidthMeasurementActive,
+            };
+        }
+        
+        private int[] CalculateRecentSpeeds() {
             /* Calculate download speed */
             var downloadEntries = _bytesDownloadedTracker.ToArray();
             long bytesDownloaded = 0;
@@ -472,20 +617,20 @@ namespace TwitchUnjail.Core.Managers {
                     _bytesWrittenTracker.Remove(entry.Key, out _);
                 }
             }
-
+            
             var secondsElapsed = (DateTime.Now - _startTime).TotalSeconds;
             var averageOverSeconds = Math.Min(secondsElapsed, SpeedAveragingSeconds);
-            return new DownloadProgressUpdateEventArgs {
-                TargetFile = TargetFilePath,
-                SecondsElapsed = secondsElapsed,
-                ChunksTotal = total,
-                ChunksDownloaded = downloaded,
-                ChunksWritten = written,
-                DownloadSpeedKBps = (int)(bytesDownloaded / 1024.0 / averageOverSeconds),
-                WriteSpeedKBps = (int)(bytesWritten / 1024.0 / averageOverSeconds),
-                IsPaused = _isPaused,
-                TargetSpeedLimitKbPerSecond = _isSpeedLimited ? _targetSpeedKbPerSecond : null,
+            return new[] {
+                (int)(bytesDownloaded / 1024.0 / averageOverSeconds),
+                (int)(bytesWritten / 1024.0 / averageOverSeconds),
             };
+        }
+
+        private double GetAverageChunkSize() {
+            while (_sizePerChunkQueue.Count > ChunksForChunkSizeCalculation) {
+                _sizePerChunkQueue.TryDequeue(out _);
+            }
+            return _sizePerChunkQueue.Average();
         }
     }
 
@@ -502,7 +647,7 @@ namespace TwitchUnjail.Core.Managers {
         private const int MaxSavedUpAllowance = 16 * 1024 * 1024;
         
         /* Events used to update subscribers of number of bytes downloaded */
-        public delegate void DownloadNotificationHandler(object sender, int bytesDownloaded);
+        public delegate void DownloadNotificationHandler(object sender, int threadIndex, int bytesDownloaded);
         public event DownloadNotificationHandler DownloadNotification;
 
         private HttpClient _client;
@@ -562,7 +707,7 @@ namespace TwitchUnjail.Core.Managers {
                 while (true) {
                     /* If allowance is active, wait for bytes to become available */
                     if (_isPaused || _byteAllowance != null) {
-                        while (_isPaused || _byteAllowance == 0) {
+                        while (_isPaused || _byteAllowance <= 0) {
                             _logManager.LogIfAvailable($"[MHD] Thread {_threadIndex} is paused ({_isPaused}) or waiting for allowance ({_byteAllowance is 0}) ...");
                             Thread.Sleep(100);
                         }
@@ -577,9 +722,10 @@ namespace TwitchUnjail.Core.Managers {
                     /* Read bytes and add as one chunk */
                     _logManager.LogIfAvailable($"[MHD] Thread {_threadIndex} trying to read {bytesToRead} bytes ...");
                     bytesRead = await stream.ReadAsync(_buffer, 0, bytesToRead);
+                    
                     _logManager.LogIfAvailable($"[MHD] Thread {_threadIndex} got {bytesRead} bytes !");
                     if (bytesRead == 0) break; /* Exit reading loop if no bytes could be read */
-                    DownloadNotification?.Invoke(this, bytesRead);
+                    DownloadNotification?.Invoke(this, _threadIndex, bytesRead);
                     var chunk = new byte[bytesRead];
                     for (var i = 0; i < bytesRead; i++) {
                         chunk[i] = _buffer[i];
@@ -609,14 +755,20 @@ namespace TwitchUnjail.Core.Managers {
             return result;
         }
 
+        /**
+         * Pauses this downloader until resume is called.
+         */
         public void Pause() {
             _isPaused = true;
         }
         
+        /**
+         * Resumes this downloader.
+         */
         public void Resume() {
             _isPaused = false;
         }
-
+        
         ~MeteredHttpDownloader() {
             _client.Dispose();
         }
@@ -646,6 +798,10 @@ namespace TwitchUnjail.Core.Managers {
         public int WriteSpeedKBps { get; set; }
         public bool IsPaused { get; set; }
         public int? TargetSpeedLimitKbPerSecond { get; set; }
+        
+        public int? TargetSpeedPercent { get; set; }
+        
+        public bool IsMeasuringSpeed { get; set; }
     }
 
     public enum DownloaderCommand {
@@ -654,5 +810,11 @@ namespace TwitchUnjail.Core.Managers {
         ToggleVariableSpeedLimit,
         IncreaseSpeedLimit,
         DecreaseSpeedLimit,
+    }
+
+    public enum DownloaderSpeedLimit {
+        None,
+        Fixed,
+        Variable,
     }
 }
