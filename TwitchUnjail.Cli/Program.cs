@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
-using System.Threading.Tasks;
-using TwitchUnjail.Cli.Utilities;
-using TwitchUnjail.Core.Managers;
+﻿using TwitchUnjail.Cli.Utilities;
 using TwitchUnjail.Core.Models;
 using TwitchUnjail.Core.Utilities;
 
@@ -62,7 +56,7 @@ namespace TwitchUnjail.Cli {
             var secondOfDayIdentifier =
                 vod.RecordDate.Hour * 3600 + vod.RecordDate.Minute * 60 + vod.RecordDate.Second;
             return FileSystemHelper.StripInvalidChars(
-                $"{vod.RecordDate.ToString("dd-MM-yyyy")} - {vod.ChannelDisplayName} - {vod.Title} ({secondOfDayIdentifier}).mp4");
+                $"{vod.RecordDate:dd-MM-yyyy} - {vod.ChannelDisplayName} - {vod.Title} ({secondOfDayIdentifier}).mp4");
         }
         
         /**
@@ -72,7 +66,7 @@ namespace TwitchUnjail.Cli {
             var secondOfDayIdentifier =
                 recoveryInfo.RecordDate.Hour * 3600 + recoveryInfo.RecordDate.Minute * 60 + recoveryInfo.RecordDate.Second;
             return FileSystemHelper.StripInvalidChars(
-                $"{recoveryInfo.RecordDate.ToString("dd-MM-yyyy")} - {recoveryInfo.ChannelDisplayName} ({secondOfDayIdentifier}).mp4");
+                $"{recoveryInfo.RecordDate:dd-MM-yyyy} - {recoveryInfo.ChannelDisplayName} ({secondOfDayIdentifier}).mp4");
         }
     }
 }

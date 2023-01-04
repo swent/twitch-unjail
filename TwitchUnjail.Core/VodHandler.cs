@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Text;
 using TwitchUnjail.Core.Managers;
 using TwitchUnjail.Core.Models;
 using TwitchUnjail.Core.Models.Enums;
@@ -135,7 +130,7 @@ namespace TwitchUnjail.Core {
 
             /* Save file */
             Directory.CreateDirectory(Path.GetDirectoryName(targetFilePath)!);
-            File.WriteAllText(targetFilePath, m3U8, Encoding.UTF8);
+            await File.WriteAllTextAsync(targetFilePath, m3U8, Encoding.UTF8);
         }
 
         public static async ValueTask<Dictionary<FeedQuality, string>> RecoverVodFeeds(VodRecoveryInfo recoveryInfo) {
@@ -195,7 +190,7 @@ namespace TwitchUnjail.Core {
                     .Select(quality => $"{reachableUrl}/{quality.Item2}/index-dvr.m3u8")
                     .ToArray();
                 var tasks = urlsToCheck
-                    .Select(url => HttpHelper.IsUrlReachable(url))
+                    .Select(HttpHelper.IsUrlReachable)
                     .ToArray();
                 await Task.WhenAll(tasks);
                 var vodFeeds = new Dictionary<FeedQuality, string>();

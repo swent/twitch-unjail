@@ -1,11 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Net;
 using System.Reflection;
 using System.Text.Json;
-using System.Threading.Tasks;
 using TwitchUnjail.Cli.Utilities;
 using TwitchUnjail.Core;
 using TwitchUnjail.Core.Managers;
@@ -24,7 +18,7 @@ namespace TwitchUnjail.Cli {
          * Runs the vod download in cli mode, reading all input from process arguments.
          * Will fail if arguments are missing or wrong.
          */
-        internal static async ValueTask RunVodDownloadCli(string videoUrl, string[] args) {
+        private static async ValueTask RunVodDownloadCli(string videoUrl, string[] args) {
             /* Read cli arguments */
             var quality = ArgumentsHelper.SearchArgument<string>(args, "quality")
                           ?? ArgumentsHelper.SearchArgument<string>(args, "q")

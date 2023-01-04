@@ -1,13 +1,6 @@
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Net.Http;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Timers;
 using TwitchUnjail.Core.Models;
 using TwitchUnjail.Core.Utilities;
@@ -58,7 +51,7 @@ namespace TwitchUnjail.Core.Managers {
         /* Target filepath where downloaded bytes are written to */
         public string TargetFilePath { get; }
 
-        private int _targetFiles;
+        private readonly int _targetFiles;
         private bool _running;
         private Exception _encounteredException;
         private DownloadManagerProxy _managerProxy;
@@ -248,6 +241,7 @@ namespace TwitchUnjail.Core.Managers {
                 _logManager.LogIfAvailable($"[CDM] Thread {threadIndex} picked chunk {chunk.Index} from queue");
                 var retryCounter = 0;
                 while (!chunk.Done) {
+                    
                     try {
                         stopWatch.Restart();
                         _logManager.LogIfAvailable($"[CDM] Thread {threadIndex} starting attempt {retryCounter + 1} to download chunk {chunk.Index} ...");
@@ -257,6 +251,7 @@ namespace TwitchUnjail.Core.Managers {
                         _sizePerChunkQueue.Enqueue(chunk.Content.Length);
                         MarkFinished(chunk);
                     } catch (Exception ex) {
+                        
                         retryCounter++;
                         /* Kill all download threads and exit out if too many failed attempts */
                         _logManager.LogIfAvailable($"[CDM] Thread {threadIndex} encountered an exception when downloading chunk {chunk.Index}: {ex.Message} {ex.StackTrace}");
@@ -270,6 +265,7 @@ namespace TwitchUnjail.Core.Managers {
                             }
                             return;
                         } else {
+                            
                             /* Wait a little before retrying the same chunk that just failed */
                             Thread.Sleep(5 * 1000);
                         }
@@ -294,6 +290,7 @@ namespace TwitchUnjail.Core.Managers {
             /* Check if this thread passed in the next chunk we are waiting for, if so go into write logic */
             if (chunk.Index == _finishedIndex + 1) {
                 _logManager.LogIfAvailable($"[CDM] Chunk {chunk.Index} is finished and next in order ! Starting to write all available chunks from queue ...");
+                
                 var counter = _finishedIndex + 1;
                 while (_doneQueue.TryGetValue(counter, out var writeChunk)) {
                     _logManager.LogIfAvailable($"[CDM] Chunk {writeChunk.Index} of size {writeChunk.Content?.Length ?? -1} bytes is being written to disk ...");
@@ -306,6 +303,7 @@ namespace TwitchUnjail.Core.Managers {
                     }
                     counter++;
                 }
+                
                 _finishedIndex = counter - 1;
                 if (counter > _lastIndex) {
                     /* Signal that we're done */
@@ -334,21 +332,23 @@ namespace TwitchUnjail.Core.Managers {
          * When all other threads have exited, will signal the main download method
          * to resume.
          */
-        public void AbortThreads(Exception exception) {
-            /* Set exception property and wait for all threads to exit */
-            if (_encounteredException == null) {
-                _logManager.LogIfAvailable($"[CDM] Aborting all threads due to exception: {exception.Message}");
-                _encounteredException = exception;
-                int aliveCount;
-                while ((aliveCount = _threads.Count(t => t.Item1.IsAlive)) > 1) {
-                    _logManager.LogIfAvailable($"[CDM] Waiting for threads to end (alive: {aliveCount}) ...");
-                    Thread.Sleep(500);
-                }
-            
-                /* Signal main method to continue */
-                _logManager.LogIfAvailable($"[CDM] All {_threads.Length} threads stopped, signaling finish task to resume ...");
-                _finishedTask?.RunSynchronously();
+        private void AbortThreads(Exception exception) {
+            if (_encounteredException != null) {
+                return;
             }
+            
+            /* Set exception property and wait for all threads to exit */
+            _logManager.LogIfAvailable($"[CDM] Aborting all threads due to exception: {exception.Message}");
+            _encounteredException = exception;
+            int aliveCount;
+            while ((aliveCount = _threads.Count(t => t.Item1.IsAlive)) > 1) {
+                _logManager.LogIfAvailable($"[CDM] Waiting for threads to end (alive: {aliveCount}) ...");
+                Thread.Sleep(500);
+            }
+            
+            /* Signal main method to continue */
+            _logManager.LogIfAvailable($"[CDM] All {_threads.Length} threads stopped, signaling finish task to resume ...");
+            _finishedTask?.RunSynchronously();
         }
 
         /**
@@ -440,9 +440,7 @@ namespace TwitchUnjail.Core.Managers {
         private void OnProgressTimerElapsed(object sender, ElapsedEventArgs e) {
             var eventArgs = GenerateProgressUpdateEventArgs();
             DownloadProgressUpdate?.Invoke(this, eventArgs);
-            if (_managerProxy != null) {
-                _managerProxy.SignalProgressUpdate(eventArgs);
-            }
+            _managerProxy?.SignalProgressUpdate(eventArgs);
         }
         
         /**
@@ -489,7 +487,7 @@ namespace TwitchUnjail.Core.Managers {
                  even began. Also use the chunk size to counter-weight the error-adjust. Hopefully this can be
                  replaced by some proper metric at some point. */
                 var chunkSizeAdjustmentFactor = Math.Min(0.5 + Math.Min(GetAverageChunkSize() / 1024 / 1024, 5.3) * 0.0943, 1.0);
-                var errorAdjustmentFactor = Math.Max((1.06 + 0.021 * _threads.Length) * Math.Pow(1.021, _threads.Length) * chunkSizeAdjustmentFactor /*+ (100.0 / _targetSpeedPercent - 1.33) * 0.03*/, 1.0);
+                var errorAdjustmentFactor = Math.Max((1.06 + 0.021 * _threads.Length) * Math.Pow(1.021, _threads.Length) * chunkSizeAdjustmentFactor, 1.0);
                 /* Apply new speed limit */
                 _targetSpeedKbPerSecond = (int)(bytesPerSecond / 1024.0 * (_targetSpeedPercent / 100.0) / errorAdjustmentFactor);
                 var allowancePerThread = (int)(_targetSpeedKbPerSecond * 1024.0 / _threads.Length / 16);
@@ -650,23 +648,23 @@ namespace TwitchUnjail.Core.Managers {
         public delegate void DownloadNotificationHandler(object sender, int threadIndex, int bytesDownloaded);
         public event DownloadNotificationHandler DownloadNotification;
 
-        private HttpClient _client;
-        private int _threadIndex;
+        private readonly HttpClient _client;
+        private readonly int _threadIndex;
+        private readonly byte[] _buffer;
+        private readonly object _lock;
+        private readonly FileLogManager _logManager;
         private int? _byteAllowance;
-        private byte[] _buffer;
-        private object _lock;
         private bool _isPaused;
-        private FileLogManager _logManager;
-        
+
         public MeteredHttpDownloader(int threadIndex, int? byteAllowance, FileLogManager logManager = null) {
             _client = new HttpClient();
             _threadIndex = threadIndex;
             _client.DefaultRequestHeaders.Add("User-Agent", HttpHelper.UserAgent);
-            _byteAllowance = byteAllowance;
             _buffer = new byte[BufferSize];
             _lock = new object();
-            _isPaused = false;
             _logManager = logManager;
+            _byteAllowance = byteAllowance;
+            _isPaused = false;
         }
 
         /**
@@ -698,12 +696,11 @@ namespace TwitchUnjail.Core.Managers {
             var response = await _client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
             _logManager.LogIfAvailable($"[MHD] Thread {_threadIndex} got response, code {response.StatusCode} ...");
             response.EnsureSuccessStatusCode();
-            
-            int bytesRead;
+
             var chunks = new List<byte[]>();
             
             /* Start processing data */
-            using (var stream = await response.Content.ReadAsStreamAsync()) {
+            await using (var stream = await response.Content.ReadAsStreamAsync()) {
                 while (true) {
                     /* If allowance is active, wait for bytes to become available */
                     if (_isPaused || _byteAllowance != null) {
@@ -716,12 +713,12 @@ namespace TwitchUnjail.Core.Managers {
                     /* Determine number of bytes to read */
                     int bytesToRead;
                     lock (_lock) {
-                        bytesToRead = Math.Min(BufferSize, _byteAllowance != null ? (int)_byteAllowance : int.MaxValue);
+                        bytesToRead = Math.Min(BufferSize, _byteAllowance ?? int.MaxValue);
                     }
 
                     /* Read bytes and add as one chunk */
                     _logManager.LogIfAvailable($"[MHD] Thread {_threadIndex} trying to read {bytesToRead} bytes ...");
-                    bytesRead = await stream.ReadAsync(_buffer, 0, bytesToRead);
+                    var bytesRead = await stream.ReadAsync(_buffer, 0, bytesToRead);
                     
                     _logManager.LogIfAvailable($"[MHD] Thread {_threadIndex} got {bytesRead} bytes !");
                     if (bytesRead == 0) break; /* Exit reading loop if no bytes could be read */
@@ -735,7 +732,7 @@ namespace TwitchUnjail.Core.Managers {
                     /* Adjust allowance */
                     if (_byteAllowance != null) {
                         lock (_lock) {
-                            _byteAllowance = _byteAllowance - bytesRead;
+                            _byteAllowance -= bytesRead;
                         }
                     }
                 }

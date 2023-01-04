@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
 using TwitchUnjail.Core.Managers;
 
 namespace TwitchUnjail.Cli {
@@ -12,15 +9,14 @@ namespace TwitchUnjail.Cli {
         private const int TimeAveragingSegments = 60;
         
         /* Factor done averaging queue */
-        private static Queue<double> _factorDoneValues = new();
+        private static readonly Queue<double> _factorDoneValues = new();
         /* Time remaining averaging queue */
-        private static Queue<double> _timeRemainingValues = new();
+        private static readonly Queue<double> _timeRemainingValues = new();
 
         /**
          * Resets all progress view metrics and triggers a clean draw of the progress view.
          */
         private static void InitializeDownloadProgressView(string targetFilename) {
-            // _lastSegmentsDone = -1;
             lock (_factorDoneValues) {
                 _factorDoneValues.Clear();
             }
@@ -59,7 +55,7 @@ namespace TwitchUnjail.Cli {
                     if (_timeRemainingValues.Count > TimeAveragingSegments / 2) _timeRemainingValues.Dequeue();
                     averageSecondsRemaining = _timeRemainingValues.Sum() / _timeRemainingValues.Count;
                 }
-                var timeRemaining = TimeSpan.FromSeconds(Math.Max(averageSecondsRemaining - TimeAveragingSegments / 2 * (ChunkedDownloadManager.ProgressUpdateIntervalMilliseconds / 1000.0), 0.0));
+                var timeRemaining = TimeSpan.FromSeconds(Math.Max(averageSecondsRemaining - TimeAveragingSegments / 2.0 * (ChunkedDownloadManager.ProgressUpdateIntervalMilliseconds / 1000.0), 0.0));
                 etaString = "ETA: " + timeRemaining.ToString(timeRemaining .TotalMinutes > 59 ? "hh\\:mm\\:ss" : "mm\\:ss").PadRight(8);
             }
 
@@ -84,13 +80,13 @@ namespace TwitchUnjail.Cli {
             Console.SetCursorPosition(0, 3);
             Console.Write($"Written        | {written} / {total}".PadRight(consoleWidth));
             Console.SetCursorPosition(0, 4);
-            var additionalDownloadSpeedinfo = string.Empty;
+            var additionalDownloadSpeedInfo = string.Empty;
             if (limitPercent != null) {
-                additionalDownloadSpeedinfo = $"(limited to {limitPercent}%, {((int)limitKbPerSecond / 1024.0).ToString("F2", CultureInfo.InvariantCulture)} mb/s)";
+                additionalDownloadSpeedInfo = $"(limited to {limitPercent}%, {((int)limitKbPerSecond / 1024.0).ToString("F2", CultureInfo.InvariantCulture)} mb/s)";
             } else if (limitKbPerSecond != null) {
-                additionalDownloadSpeedinfo = $"(limited to {((int)limitKbPerSecond / 1024.0).ToString("F2", CultureInfo.InvariantCulture)} mb/s)";
+                additionalDownloadSpeedInfo = $"(limited to {((int)limitKbPerSecond / 1024.0).ToString("F2", CultureInfo.InvariantCulture)} mb/s)";
             }
-            Console.Write($"Download speed | {(downloadSpeedKBps / 1024.0).ToString("F2", CultureInfo.InvariantCulture)} mb/s {additionalDownloadSpeedinfo}".PadRight(consoleWidth));
+            Console.Write($"Download speed | {(downloadSpeedKBps / 1024.0).ToString("F2", CultureInfo.InvariantCulture)} mb/s {additionalDownloadSpeedInfo}".PadRight(consoleWidth));
             Console.SetCursorPosition(0, 5);
             Console.Write($"Write speed    | {(writeSpeedKBps / 1024.0).ToString("F2", CultureInfo.InvariantCulture)} mb/s".PadRight(consoleWidth));
             Console.SetCursorPosition(0, 6);

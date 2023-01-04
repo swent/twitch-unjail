@@ -1,5 +1,3 @@
-using System;
-using System.Threading;
 using TwitchUnjail.Core.Managers;
 
 namespace TwitchUnjail.Core.Models {
@@ -13,7 +11,7 @@ namespace TwitchUnjail.Core.Models {
 
         private bool _readKeys;
         private Thread _readingThread;
-        private Action<DownloadProgressUpdateEventArgs> _updateCallback;
+        private readonly Action<DownloadProgressUpdateEventArgs> _updateCallback;
 
         public DownloadManagerProxy(Action<DownloadProgressUpdateEventArgs> updateCallback) {
             _readKeys = false;
