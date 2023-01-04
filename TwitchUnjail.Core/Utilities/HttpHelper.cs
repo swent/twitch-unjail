@@ -14,7 +14,7 @@ namespace TwitchUnjail.Core.Utilities {
             try {
                 using var client = new HttpClient();
                 client.DefaultRequestHeaders.Add("User-Agent", UserAgent);
-                //client.DefaultRequestHeaders.Add("Client-ID", "kimne78kx3ncx6brgo4mv6wki5h1ko");
+                client.DefaultRequestHeaders.Add("Client-ID", "kimne78kx3ncx6brgo4mv6wki5h1ko");
                 var response = await client.GetAsync(url);
                 response.EnsureSuccessStatusCode();
                 return true;
