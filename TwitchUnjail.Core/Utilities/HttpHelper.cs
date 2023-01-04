@@ -8,7 +8,7 @@ namespace TwitchUnjail.Core.Utilities {
     public static class HttpHelper {
 
         public const string DomainsUrl = "https://raw.githubusercontent.com/TwitchRecover/TwitchRecover/main/domains.txt";
-        public const string UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.36 Safari/537.36";
+        public const string UserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/108.0.5359.112 Mobile/15E148 Safari/604.1";
 
         public static async Task<bool> IsUrlReachable(string url) {
             try {
