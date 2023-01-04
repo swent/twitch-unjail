@@ -12,9 +12,8 @@ namespace TwitchUnjail.Core {
         private const string ApiUrl = "https://api.twitch.tv";
         private const string TokenUrl = "https://gql.twitch.tv/gql";
         private const string TwitchClientId = "kimne78kx3ncx6brgo4mv6wki5h1ko";
-
-        [GeneratedRegex("twitch\\.tv\\/videos\\/([0-9]+)", RegexOptions.IgnoreCase)]
-        private static partial Regex TwitchVodRegex();
+        
+        private static readonly Regex TwitchVodRegex = new("twitch\\.tv\\/videos\\/([0-9]+)", RegexOptions.IgnoreCase);
 
         public static async ValueTask<VideoInfoResponse> GetVideoInfo(string url) {
             var videoId = GetVideoIdForUrl(url);
@@ -40,7 +39,7 @@ namespace TwitchUnjail.Core {
 
         public static long GetVideoIdForUrl(string url) {
             try {
-                var matches = TwitchVodRegex().Match(url);
+                var matches = TwitchVodRegex.Match(url);
                 if (matches.Success && matches.Groups.Count == 2) {
                     return long.Parse(matches.Groups[1].Value);
                 }

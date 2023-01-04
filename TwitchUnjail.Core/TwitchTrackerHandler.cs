@@ -6,12 +6,11 @@ using TwitchUnjail.Core.Utilities;
 namespace TwitchUnjail.Core {
     
     public static partial class TwitchTrackerHandler {
-
-        [GeneratedRegex("twitchtracker\\.com\\/([a-z0-9_-]+)\\/streams\\/([0-9]+)", RegexOptions.IgnoreCase)]
-        private static partial Regex TwitchTrackerRegex();
+        
+        private static readonly Regex TwitchTrackerRegex = new("twitchtracker\\.com\\/([a-z0-9_-]+)\\/streams\\/([0-9]+)", RegexOptions.IgnoreCase);
 
         public static async ValueTask<VodRecoveryInfo> RetrieveInfo(string url) {
-            var matches = TwitchTrackerRegex().Match(url);
+            var matches = TwitchTrackerRegex.Match(url);
 
             if (!matches.Success || matches.Groups.Count != 3) {
                 throw new Exception("Url is not a valid twitchtracker.com stream url");

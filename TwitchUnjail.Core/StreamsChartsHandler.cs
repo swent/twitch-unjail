@@ -7,11 +7,10 @@ namespace TwitchUnjail.Core {
     
     public static partial class StreamsChartsHandler {
         
-        [GeneratedRegex("streamscharts\\.com\\/channels\\/([a-z0-9_-]+)\\/streams\\/([0-9]+)", RegexOptions.IgnoreCase)]
-        private static partial Regex StreamsChartsRegex();
+        private static readonly Regex StreamsChartsRegex = new("streamscharts\\.com\\/channels\\/([a-z0-9_-]+)\\/streams\\/([0-9]+)", RegexOptions.IgnoreCase);
         
         public static async ValueTask<VodRecoveryInfo> RetrieveInfo(string url) {
-            var matches = StreamsChartsRegex().Match(url);
+            var matches = StreamsChartsRegex.Match(url);
 
             if (!matches.Success || matches.Groups.Count != 3) {
                 throw new Exception("Url is not a valid streamscharts.com stream url");

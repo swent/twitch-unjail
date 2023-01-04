@@ -650,9 +650,10 @@ namespace TwitchUnjail.Core.Managers {
 
         private readonly HttpClient _client;
         private readonly int _threadIndex;
-        private readonly byte[] _buffer;
         private readonly object _lock;
         private readonly FileLogManager _logManager;
+        private byte[] _buffer;
+        private int _currentBufferIndex;
         private int? _byteAllowance;
         private bool _isPaused;
 
@@ -660,9 +661,10 @@ namespace TwitchUnjail.Core.Managers {
             _client = new HttpClient();
             _threadIndex = threadIndex;
             _client.DefaultRequestHeaders.Add("User-Agent", HttpHelper.UserAgent);
-            _buffer = new byte[BufferSize];
             _lock = new object();
             _logManager = logManager;
+            _buffer = new byte[BufferSize];
+            _currentBufferIndex = 0;
             _byteAllowance = byteAllowance;
             _isPaused = false;
         }
@@ -697,8 +699,8 @@ namespace TwitchUnjail.Core.Managers {
             _logManager.LogIfAvailable($"[MHD] Thread {_threadIndex} got response, code {response.StatusCode} ...");
             response.EnsureSuccessStatusCode();
 
-            var chunks = new List<byte[]>();
-            
+            _currentBufferIndex = 0;
+
             /* Start processing data */
             await using (var stream = await response.Content.ReadAsStreamAsync()) {
                 while (true) {
@@ -716,19 +718,16 @@ namespace TwitchUnjail.Core.Managers {
                         bytesToRead = Math.Min(BufferSize, _byteAllowance ?? int.MaxValue);
                     }
 
-                    /* Read bytes and add as one chunk */
+                    /* Read bytes into buffer */
                     _logManager.LogIfAvailable($"[MHD] Thread {_threadIndex} trying to read {bytesToRead} bytes ...");
-                    var bytesRead = await stream.ReadAsync(_buffer, 0, bytesToRead);
+                    EnsureBufferCanFit(bytesToRead);
+                    var bytesRead = await stream.ReadAsync(_buffer, _currentBufferIndex, bytesToRead);
+                    _currentBufferIndex += bytesRead;
                     
                     _logManager.LogIfAvailable($"[MHD] Thread {_threadIndex} got {bytesRead} bytes !");
                     if (bytesRead == 0) break; /* Exit reading loop if no bytes could be read */
                     DownloadNotification?.Invoke(this, _threadIndex, bytesRead);
-                    var chunk = new byte[bytesRead];
-                    for (var i = 0; i < bytesRead; i++) {
-                        chunk[i] = _buffer[i];
-                    }
-                    chunks.Add(chunk);
-                    
+
                     /* Adjust allowance */
                     if (_byteAllowance != null) {
                         lock (_lock) {
@@ -739,15 +738,39 @@ namespace TwitchUnjail.Core.Managers {
             }
 
             /* Concat chunks into one byte array */
-            var totalBytes = chunks.Aggregate(0, (res, cur) => res + cur.Length);
-            var result = new byte[totalBytes];
-            var counter = 0;
-            _logManager.LogIfAvailable($"[MHD] Thread {_threadIndex} finalizing download, merging {chunks.Count} parts of {totalBytes} bytes ...");
-            foreach (var chunk in chunks) {
-                for (var i = 0; i < chunk.Length; i++) {
-                    result[counter + i] = chunk[i];
+            _logManager.LogIfAvailable($"[MHD] Thread {_threadIndex} finalizing download, total of {_currentBufferIndex} bytes ...");
+            return GetDownloadResult();
+        }
+
+        /**
+         * Ensures that the buffer is sized to fit a given amount of additional bytes.
+         */
+        private void EnsureBufferCanFit(int bytes) {
+            /* Calculate the new buffer size required */
+            var newLength = _buffer.Length;
+            var lengthRequired = _currentBufferIndex + bytes;
+            while (newLength < lengthRequired) {
+                newLength = (int)Math.Max(_buffer.Length * 1.7, BufferSize);
+            }
+
+            /* If the size is different than current size, re-allocate buffer & copy content */
+            if (_buffer.Length != newLength) {
+                var newBuffer = new byte[newLength];
+                for (var i = 0; i < _currentBufferIndex; i++) {
+                    newBuffer[i] = _buffer[i];
                 }
-                counter += chunk.Length;
+                _buffer = newBuffer;
+            }
+        }
+        
+        /**
+         * Allocates a new byte array with a size fitting the downloaded content
+         * and copies all bytes to the new array and returns it.
+         */
+        private byte[] GetDownloadResult() {
+            var result = new byte[_currentBufferIndex];
+            for (var i = 0; i < _currentBufferIndex; i++) {
+                result[i] = _buffer[i];
             }
             return result;
         }
